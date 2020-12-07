@@ -246,7 +246,7 @@ _tmain (
    QUOTA_LIMITS quotaLimits;
 
    LPTSTR szCommandLine = NULL;
-   LPTSTR szSrcCommandLine = TEXT("%systemroot%\\system32\\cmd.exe");
+   LPTSTR szSrcCommandLine = TEXT("%systemroot%\\system32\\cmd.exe /k \"whoami -all & set\"");
    LPTSTR szDomain = NULL;
    LPTSTR szUsername = NULL;
    TCHAR seps[] = TEXT("\\");
