@@ -468,7 +468,7 @@ _tmain (
    Status = LsaLogonUser(
       hLsa,
       &OriginName,
-      Network,                // Or Batch
+      Batch,                  // Or Network
       ulAuthenticationPackage,
       pS4uLogon,
       dwMessageLength,
