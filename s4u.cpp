@@ -231,6 +231,7 @@ _tmain (
 
    PBYTE pbPosition;
 
+   PROFILEINFO profileInfo = { 0 };
    LPVOID lpUserEnvironment = NULL;
    PROCESS_INFORMATION pi = { 0 };
    STARTUPINFO si = { 0 };
@@ -489,6 +490,25 @@ _tmain (
    printf("LsaLogonUser: OK, LogonId: 0x%x-0x%x\n", logonId.HighPart, logonId.LowPart);
 
    //
+   // Load the user profile.
+   //
+   PMSV1_0_INTERACTIVE_PROFILE pInteractiveProfile = (PMSV1_0_INTERACTIVE_PROFILE)pvProfile;
+   if (pInteractiveProfile->MessageType != MsV1_0InteractiveProfile)
+   {
+       fprintf(stderr, "LsaLogonUser returned the unexpected profile %d.\n", pInteractiveProfile->MessageType);
+       goto End;
+   }
+   profileInfo.dwSize = sizeof(profileInfo);
+   profileInfo.dwFlags = PI_NOUI;
+   profileInfo.lpServerName = pInteractiveProfile->LogonServer.Buffer;
+   profileInfo.lpUserName = szUsername;
+   if (!LoadUserProfile(hTokenS4U, &profileInfo))
+   {
+        fprintf(stderr, "LoadUserProfile failed (error %u).\n", GetLastError());
+        goto End;
+   }
+
+   //
    // Load the user environment variables.
    //
    if (!CreateEnvironmentBlock(&lpUserEnvironment, hTokenS4U, FALSE))
@@ -583,6 +603,8 @@ End:
       LsaClose(hLsa);
    if (lpUserEnvironment)
       DestroyEnvironmentBlock(lpUserEnvironment);
+   if (profileInfo.hProfile)
+      UnloadUserProfile(hTokenS4U, profileInfo.hProfile);
    if (hToken)
       CloseHandle(hToken);
    if (hTokenS4U)
