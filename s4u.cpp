@@ -291,7 +291,7 @@ _tmain (
 
    if (bResult == FALSE)
    {
-      fprintf(stderr, "GetVersionEx failed (error %u).", GetLastError());
+      fprintf(stderr, "GetVersionEx failed (error %u).\n", GetLastError());
       goto End;
    }
 
@@ -320,7 +320,7 @@ _tmain (
    Status = LsaConnectUntrusted(&hLsa);
    if (Status!=STATUS_SUCCESS)
    {
-      fprintf(stderr, "LsaConnectUntrusted failed (error 0x%x).", Status);
+      fprintf(stderr, "LsaConnectUntrusted failed (error 0x%x).\n", Status);
       hLsa = NULL;
       goto End;
    }
@@ -332,7 +332,7 @@ _tmain (
    Status = LsaLookupAuthenticationPackage(hLsa, &Msv1_0Name, &ulAuthenticationPackage);
    if (Status!=STATUS_SUCCESS)
    {
-      fprintf(stderr, "LsaLookupAuthenticationPackage failed (error 0x%x).", Status);
+      fprintf(stderr, "LsaLookupAuthenticationPackage failed (error 0x%x).\n", Status);
       hLsa = NULL;
       goto End;
    }
@@ -373,7 +373,7 @@ _tmain (
          );
       if (Status!=STATUS_SUCCESS)
       {
-         printf("LsaCallAuthenticationPackage() failed (error 0x%x).\n", Status);
+         fprintf(stderr, "LsaCallAuthenticationPackage() failed (error 0x%x).\n", Status);
          goto End;
       }
    }
@@ -385,7 +385,7 @@ _tmain (
    pS4uLogon = (PMSV1_0_S4U_LOGON)HeapAlloc(g_hHeap, HEAP_ZERO_MEMORY, dwMessageLength);
    if (pS4uLogon == NULL)
    {
-      fprintf(stderr, "HeapAlloc failed (error %u).", GetLastError());
+      fprintf(stderr, "HeapAlloc failed (error %u).\n", GetLastError());
       goto End;
    }
 
@@ -409,7 +409,7 @@ _tmain (
    pGroups = (PTOKEN_GROUPS)HeapAlloc(g_hHeap, HEAP_ZERO_MEMORY, sizeof(TOKEN_GROUPS) + 2*sizeof(SID_AND_ATTRIBUTES));
    if (pGroups == NULL)
    {
-      fprintf(stderr, "HeapAlloc failed (error %u).", GetLastError());
+      fprintf(stderr, "HeapAlloc failed (error %u).\n", GetLastError());
       goto End;
    }
 
@@ -438,7 +438,7 @@ _tmain (
       }
       else
       {
-         fprintf(stderr, "Unable to convert SID (error %u).", GetLastError());
+         fprintf(stderr, "Unable to convert SID (error %u).\n", GetLastError());
       }
    }
 
@@ -486,13 +486,13 @@ _tmain (
    szCommandLine = (LPTSTR)HeapAlloc(g_hHeap, HEAP_ZERO_MEMORY, MAX_PATH * sizeof(TCHAR));
    if (szCommandLine == NULL)
    {
-      fprintf(stderr, "HeapAlloc failed (error %u).", GetLastError());
+      fprintf(stderr, "HeapAlloc failed (error %u).\n", GetLastError());
       goto End;
    }
 
    if (ExpandEnvironmentStrings(szSrcCommandLine, szCommandLine, MAX_PATH) == 0)
    {
-      fprintf(stderr, "ExpandEnvironmentStrings failed (error %u).", GetLastError());
+      fprintf(stderr, "ExpandEnvironmentStrings failed (error %u).\n", GetLastError());
       goto End;
    }
 
@@ -514,7 +514,7 @@ _tmain (
       );
    if (bResult == FALSE)
    {
-      printf("CreateProcessAsUser failed (error %u).\n", GetLastError());
+      fprintf(stderr, "CreateProcessAsUser failed (error %u).\n", GetLastError());
       goto End;
    }
 
