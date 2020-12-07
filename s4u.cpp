@@ -520,6 +520,22 @@ _tmain (
    }
 
    //
+   // Get the User Profile directory.
+   //
+   // NB we could also have used the GetUserProfileDirectory function; but
+   //    this way we do not have to deal with memory allocation.
+   //
+   LPCWSTR userProfileDirectory = TEXT("C:\\");
+   for (LPCWSTR env = (LPCWSTR)lpUserEnvironment; *env; env += wcslen(env) + 1)
+   {
+       if (!(wcsncmp(env, L"USERPROFILE=", wcslen(L"USERPROFILE="))))
+       {
+           userProfileDirectory = env + wcslen(L"USERPROFILE=");
+           break;
+       }
+   }
+
+   //
    // CreateProcessAsUser requires these privileges to be available in the current process:
    //
    //   SeTcbPrivilege (must be Enabled)
@@ -535,7 +551,7 @@ _tmain (
       FALSE,
       NORMAL_PRIORITY_CLASS | CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE,
       lpUserEnvironment,
-      TEXT("c:\\"),
+      userProfileDirectory,
       &si,
       &pi
       );
