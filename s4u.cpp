@@ -210,6 +210,7 @@ _tmain (
    _In_ TCHAR *argv[]
    )
 {
+   int exitCode = EXIT_FAILURE;
    BOOL bResult;
    NTSTATUS Status;
    NTSTATUS SubStatus;
@@ -581,6 +582,8 @@ _tmain (
       goto End;
    }
 
+   exitCode = EXIT_SUCCESS;
+
 End:
    //
    // Free resources
@@ -614,5 +617,5 @@ End:
    if (pi.hThread)
       CloseHandle(pi.hThread);
 
-   return EXIT_SUCCESS;
+   return exitCode;
 }
