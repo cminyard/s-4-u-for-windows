@@ -381,7 +381,7 @@ _tmain (
    //
    // Create MSV1_0_S4U_LOGON structure
    //
-   dwMessageLength = (DWORD)sizeof(MSV1_0_S4U_LOGON) + (EXTRA_SID_COUNT + (DWORD)wcslen(szDomain) + (DWORD)wcslen(szUsername)) * sizeof(WCHAR);
+   dwMessageLength = (DWORD)sizeof(MSV1_0_S4U_LOGON) + (DWORD)(((DWORD)EXTRA_SID_COUNT + (DWORD)wcslen(szDomain) + (DWORD)wcslen(szUsername)) * sizeof(WCHAR));
    pS4uLogon = (PMSV1_0_S4U_LOGON)HeapAlloc(g_hHeap, HEAP_ZERO_MEMORY, dwMessageLength);
    if (pS4uLogon == NULL)
    {
