@@ -296,13 +296,26 @@ _tmain (
    }
 
    //
-   // Activate the TCB privilege
+   // Activate the required privileges
+   //
+   // see https://docs.microsoft.com/en-us/windows/win32/secauthz/privilege-constants
    //
    hProcess = GetCurrentProcess();
    OpenProcessToken(hProcess, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
+   // SeTcbPrivilege User Right: Act as part of the operating system.
    if (!SetPrivilege(hToken, SE_TCB_NAME, TRUE))
    {
       goto End;
+   }
+   // SeIncreaseQuotaPrivilege User Right: Adjust memory quotas for a process.
+   if (!SetPrivilege(hToken, SE_INCREASE_QUOTA_NAME, TRUE))
+   {
+       goto End;
+   }
+   // SeAssignPrimaryTokenPrivilege User Right: Replace a process-level token.
+   if (!SetPrivilege(hToken, SE_ASSIGNPRIMARYTOKEN_NAME, TRUE))
+   {
+       goto End;
    }
 
    //
@@ -497,7 +510,11 @@ _tmain (
    }
 
    //
-   // CreateProcessAsUser required SeAssignPrimaryTokenPrivilege but no need to be activated.
+   // CreateProcessAsUser requires these privileges to be available in the current process:
+   //
+   //   SeTcbPrivilege (must be Enabled)
+   //   SeAssignPrimaryTokenPrivilege (can be Disabled, will be automatically Enabled)
+   //   SeIncreaseQuotaPrivilege (can be Disabled, will be automatically Enabled)
    //
    bResult = CreateProcessAsUser(
       hTokenS4U,
