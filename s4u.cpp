@@ -1,10 +1,12 @@
 #include <Windows.h>
 #include <Ntsecapi.h>
+#include <UserEnv.h>
 #include <sddl.h>
 #include <stdio.h>
 #include <tchar.h>
 
 #pragma comment(lib, "secur32.lib")
+#pragma comment(lib, "userenv.lib")
 
 #define STATUS_SUCCESS           0
 #define EXTRA_SID_COUNT          2
@@ -229,6 +231,7 @@ _tmain (
 
    PBYTE pbPosition;
 
+   LPVOID lpUserEnvironment = NULL;
    PROCESS_INFORMATION pi = { 0 };
    STARTUPINFO si = { 0 };
 
@@ -486,6 +489,15 @@ _tmain (
    printf("LsaLogonUser: OK, LogonId: 0x%x-0x%x\n", logonId.HighPart, logonId.LowPart);
 
    //
+   // Load the user environment variables.
+   //
+   if (!CreateEnvironmentBlock(&lpUserEnvironment, hTokenS4U, FALSE))
+   {
+       fprintf(stderr, "CreateEnvironmentBlock failed (error %u).\n", GetLastError());
+       goto End;
+   }
+
+   //
    // Create process with S4U token.
    //
    si.cb = sizeof(STARTUPINFO);
@@ -521,8 +533,8 @@ _tmain (
       NULL,
       NULL,
       FALSE,
-      NORMAL_PRIORITY_CLASS | CREATE_NEW_CONSOLE,
-      NULL,
+      NORMAL_PRIORITY_CLASS | CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE,
+      lpUserEnvironment,
       TEXT("c:\\"),
       &si,
       &pi
@@ -553,6 +565,8 @@ End:
       LsaFreeReturnBuffer(pvProfile);
    if (hLsa)
       LsaClose(hLsa);
+   if (lpUserEnvironment)
+      DestroyEnvironmentBlock(lpUserEnvironment);
    if (hToken)
       CloseHandle(hToken);
    if (hTokenS4U)
