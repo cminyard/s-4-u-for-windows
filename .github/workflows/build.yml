@@ -1,0 +1,24 @@
+name: Build
+on: [push]
+jobs:
+  build:
+    name: Build
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1.0.2
+        with:
+          vs-version: '[16.0,17.0)' # VS 2019.
+      - name: Build
+        run: |
+          MSBuild -p:Configuration=Release -p:Platform=x64
+      - name: Create Archive
+        run: |
+          Compress-Archive x64\Release\*.exe s4u.zip
+      - name: Archive Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: s4u-artifacts
+          path: |
+            *.zip

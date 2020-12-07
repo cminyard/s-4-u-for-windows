@@ -1,5 +1,7 @@
 # s(4)u for Windows #
 
+[![Build status](https://github.com/rgl/s-4-u-for-windows/workflows/Build/badge.svg)](https://github.com/rgl/s-4-u-for-windows/actions?query=workflow%3ABuild)
+
 s4u is a demonstration program using the S4U extension in msv1_.0.
 
 It allows the creation of a cmd.exe with the context of any user without requiring the password.
