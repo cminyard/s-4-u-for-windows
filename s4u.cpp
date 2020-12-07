@@ -213,7 +213,6 @@ _tmain (
    NTSTATUS SubStatus;
 
    HANDLE hLsa = NULL;
-   HANDLE hProcess = NULL;
    HANDLE hToken = NULL;
    HANDLE hTokenS4U = NULL;
 
@@ -300,8 +299,7 @@ _tmain (
    //
    // see https://docs.microsoft.com/en-us/windows/win32/secauthz/privilege-constants
    //
-   hProcess = GetCurrentProcess();
-   OpenProcessToken(hProcess, TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
+   OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
    // SeTcbPrivilege User Right: Act as part of the operating system.
    if (!SetPrivilege(hToken, SE_TCB_NAME, TRUE))
    {
