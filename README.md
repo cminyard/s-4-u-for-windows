@@ -1,6 +1,6 @@
 # s(4)u for Windows #
 
-[![Build status](https://github.com/rgl/s-4-u-for-windows/workflows/Build/badge.svg)](https://github.com/rgl/s-4-u-for-windows/actions?query=workflow%3ABuild)
+[![Build status](https://github.com/aurel26/s-4-u-for-windows/workflows/Build/badge.svg)](https://github.com/aurel26/s-4-u-for-windows/actions?query=workflow%3ABuild)
 
 s4u is a demonstration program using the [Service For User Logon (S4U) Extension](https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-sfu/3bff5864-8135-400e-bdd9-33b552051d94) of the [MSV1_0 Authentication Package](https://docs.microsoft.com/en-us/windows/win32/secauthn/msv1-0-authentication-package).
 
