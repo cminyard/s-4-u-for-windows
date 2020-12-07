@@ -28,3 +28,4 @@ obj/
 ipch/
 [Rr]elease*/
 _ReSharper*/
+.vs/
