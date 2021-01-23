@@ -204,6 +204,30 @@ InitUnicodeString (
    return (PBYTE)pbDestinationBuffer + StringSize + sizeof(WCHAR);
 }
 
+// NB this handler runs in a dedicated thread.
+BOOL WINAPI ConsoleControlHandler(DWORD ctrlType) {
+    LPCSTR ctrlTypeName;
+    #define HANDLE_CONSOLE_CONTROL_EVENT(e) case e: ctrlTypeName = #e; break;
+    switch (ctrlType) {
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_C_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_BREAK_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_CLOSE_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_LOGOFF_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_SHUTDOWN_EVENT)
+        default:
+            return FALSE;
+    }
+    #undef HANDLE_CONSOLE_CONTROL_EVENT
+    switch (ctrlType) {
+        case CTRL_CLOSE_EVENT:
+        case CTRL_LOGOFF_EVENT:
+        case CTRL_SHUTDOWN_EVENT:
+            return FALSE;
+         default:
+            return TRUE;
+    }
+}
+
 int
 _tmain (
    _In_ int argc,
@@ -252,6 +276,11 @@ _tmain (
    LPTSTR szUsername = NULL;
    TCHAR seps[] = TEXT("\\");
    TCHAR *next_token = NULL;
+
+   //
+   // Ignore CTRL+C/CTRL+BREAK so we can wait for cmd.exe to handle it and exit.
+   //
+   SetConsoleCtrlHandler(ConsoleControlHandler, TRUE);
 
    g_hHeap = GetProcessHeap();
 
@@ -570,7 +599,7 @@ _tmain (
       NULL,
       NULL,
       FALSE,
-      NORMAL_PRIORITY_CLASS | CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE,
+      NORMAL_PRIORITY_CLASS | CREATE_UNICODE_ENVIRONMENT,
       lpUserEnvironment,
       userProfileDirectory,
       &si,
@@ -612,10 +641,13 @@ End:
       CloseHandle(hToken);
    if (hTokenS4U)
       CloseHandle(hTokenS4U);
-   if (pi.hProcess)
-      CloseHandle(pi.hProcess);
    if (pi.hThread)
       CloseHandle(pi.hThread);
+   if (pi.hProcess)
+   {
+      WaitForSingleObject(pi.hProcess, INFINITE);
+      CloseHandle(pi.hProcess);
+   }
 
    return exitCode;
 }
