@@ -1005,7 +1005,7 @@ create_token_from_existing_token(HANDLE logon_tok, HANDLE *htok)
 static void
 usage(void)
 {
-    fprintf(stderr, "\ns4u.exe [options] Domain\\Username\n\n");
+    fprintf(stderr, "\ns4u.exe [options] [Domain\\]Username\n\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  --lsa - Use LsaLogonUser\n");
     fprintf(stderr, "  --s4u - Do an S4U login with --lsa\n");
@@ -1126,20 +1126,14 @@ _tmain (int argc, TCHAR *argv[])
     //
     // Get DOMAIN and USERNAME from command line.
     //
-    szDomain = _tcstok_s(argv[i], seps, &next_token);
-    if (szDomain == NULL) {
-	fprintf(stderr, "Unable to parse command line.\n");
-	usage();
-	goto End;
+    if (_tcschr(argv[i], TEXT('\\'))) {
+	szDomain = _tcstok_s(argv[i], seps, &next_token);
+	szUsername = _tcstok_s(NULL, seps, &next_token);
+    } else {
+	szDomain = TEXT("");
+	szUsername = argv[i];
+	bIsLocal = TRUE;
     }
-
-    szUsername = _tcstok_s(NULL, seps, &next_token);
-    if (szUsername == NULL)
-	{
-	    fprintf(stderr, "Unable to parse command line.\n");
-	    usage();
-	    goto End;
-	}
 
     //
     // Check if account is local or not
