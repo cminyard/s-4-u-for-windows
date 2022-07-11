@@ -1019,558 +1019,558 @@ usage(void)
 int
 _tmain (int argc, TCHAR *argv[])
 {
-   int exitCode = EXIT_FAILURE;
-   NTSTATUS Status;
-   NTSTATUS SubStatus;
+    int exitCode = EXIT_FAILURE;
+    NTSTATUS Status;
+    NTSTATUS SubStatus;
 
-   HANDLE hLsa = NULL;
-   HANDLE hToken = NULL;
-   HANDLE logon_tok = NULL;
+    HANDLE hLsa = NULL;
+    HANDLE hToken = NULL;
+    HANDLE logon_tok = NULL;
 
-   OSVERSIONINFO osvi;
-   BOOL bIsLocal = TRUE;
+    OSVERSIONINFO osvi;
+    BOOL bIsLocal = TRUE;
 
-   LSA_STRING Msv1_0Name = { 0 };
-   LSA_STRING OriginName = { 0 };
-   void *auth_info = NULL;
-   DWORD auth_info_len;
-   LPTSTR password = NULL;
-   MSV1_0_SET_OPTION SetOption;
-   TOKEN_SOURCE TokenSource;
-   ULONG ulAuthenticationPackage;
-   SECURITY_LOGON_TYPE logon_type;
+    LSA_STRING Msv1_0Name = { 0 };
+    LSA_STRING OriginName = { 0 };
+    void *auth_info = NULL;
+    DWORD auth_info_len;
+    LPTSTR password = NULL;
+    MSV1_0_SET_OPTION SetOption;
+    TOKEN_SOURCE TokenSource;
+    ULONG ulAuthenticationPackage;
+    SECURITY_LOGON_TYPE logon_type;
 
-   PBYTE pbPosition;
+    PBYTE pbPosition;
 
-   PROFILEINFO profileInfo = { 0 };
-   LPVOID lpUserEnvironment = NULL;
-   PROCESS_INFORMATION pi = { 0 };
-   STARTUPINFO si = { 0 };
+    PROFILEINFO profileInfo = { 0 };
+    LPVOID lpUserEnvironment = NULL;
+    PROCESS_INFORMATION pi = { 0 };
+    STARTUPINFO si = { 0 };
 
-   TOKEN_GROUPS *extra_groups = NULL;
-   SID *logon_sid = NULL;
-   PSID pExtraSid = NULL;
+    TOKEN_GROUPS *extra_groups = NULL;
+    SID *logon_sid = NULL;
+    PSID pExtraSid = NULL;
 
-   PVOID pvProfile = NULL;
-   DWORD dwProfile = 0;
-   LUID logonId = { 0 };
-   QUOTA_LIMITS quotaLimits;
+    PVOID pvProfile = NULL;
+    DWORD dwProfile = 0;
+    LUID logonId = { 0 };
+    QUOTA_LIMITS quotaLimits;
 
-   LPTSTR szCommandLine = NULL;
-   LPTSTR szSrcCommandLine = TEXT("%systemroot%\\system32\\cmd.exe");
-   LPTSTR szDomain = NULL;
-   LPTSTR szUsername = NULL;
-   TCHAR seps[] = TEXT("\\");
-   TCHAR *next_token = NULL;
-   LPCWSTR userProfileDirectory = TEXT("C:\\");
-   PMSV1_0_INTERACTIVE_PROFILE pInteractiveProfile = NULL;
-   unsigned int i;
-   int err;
-   size_t len;
-   bool use_lsa = false;
-   bool use_s4u = false;
-   bool add_logon_sid = false;
-   bool print_usertok = false;
-   bool add_extra_sids = false;
-   bool do_privileged = false;
+    LPTSTR szCommandLine = NULL;
+    LPTSTR szSrcCommandLine = TEXT("%systemroot%\\system32\\cmd.exe");
+    LPTSTR szDomain = NULL;
+    LPTSTR szUsername = NULL;
+    TCHAR seps[] = TEXT("\\");
+    TCHAR *next_token = NULL;
+    LPCWSTR userProfileDirectory = TEXT("C:\\");
+    PMSV1_0_INTERACTIVE_PROFILE pInteractiveProfile = NULL;
+    unsigned int i;
+    int err;
+    size_t len;
+    bool use_lsa = false;
+    bool use_s4u = false;
+    bool add_logon_sid = false;
+    bool print_usertok = false;
+    bool add_extra_sids = false;
+    bool do_privileged = false;
 
-   //
-   // Ignore CTRL+C/CTRL+BREAK so we can wait for cmd.exe to handle it
-   // and exit.
-   //
-   SetConsoleCtrlHandler(ConsoleControlHandler, TRUE);
+    //
+    // Ignore CTRL+C/CTRL+BREAK so we can wait for cmd.exe to handle it
+    // and exit.
+    //
+    SetConsoleCtrlHandler(ConsoleControlHandler, TRUE);
 
-   for (i = 1; i < argc; i++) {
-       if (argv[i][0] != TEXT('-'))
-	   break;
-       if (_tcscmp(argv[i], TEXT("--lsa")) == 0) {
-	   use_lsa = true;
-       } else if (_tcscmp(argv[i], TEXT("--")) == 0) {
-	   break;
-       } else if (_tcscmp(argv[i], TEXT("--s4u")) == 0) {
-	   use_s4u = true;
-       } else if (_tcscmp(argv[i], TEXT("--priv")) == 0) {
-	   do_privileged = true;
-       } else if (_tcscmp(argv[i], TEXT("--lsid")) == 0) {
-	   add_logon_sid = true;
-       } else if (_tcscmp(argv[i], TEXT("--puser")) == 0) {
-	   print_usertok = true;
-       } else if (_tcscmp(argv[i], TEXT("--esids")) == 0) {
-	   add_extra_sids = true;
-       } else if (_tcscmp(argv[i], TEXT("--pw")) == 0) {
-	   i++;
-	   if (i >= argc) {
-	       fprintf(stderr, "No password supplied with --pw");
-	       goto End;
-	   }
-	   password = argv[i];
-       } else {
-	   fprintf(stderr, "Unknown option: %ls\n", argv[i]);
-	   usage();
-	   goto End;
-       }
-   }
+    for (i = 1; i < argc; i++) {
+	if (argv[i][0] != TEXT('-'))
+	    break;
+	if (_tcscmp(argv[i], TEXT("--lsa")) == 0) {
+	    use_lsa = true;
+	} else if (_tcscmp(argv[i], TEXT("--")) == 0) {
+	    break;
+	} else if (_tcscmp(argv[i], TEXT("--s4u")) == 0) {
+	    use_s4u = true;
+	} else if (_tcscmp(argv[i], TEXT("--priv")) == 0) {
+	    do_privileged = true;
+	} else if (_tcscmp(argv[i], TEXT("--lsid")) == 0) {
+	    add_logon_sid = true;
+	} else if (_tcscmp(argv[i], TEXT("--puser")) == 0) {
+	    print_usertok = true;
+	} else if (_tcscmp(argv[i], TEXT("--esids")) == 0) {
+	    add_extra_sids = true;
+	} else if (_tcscmp(argv[i], TEXT("--pw")) == 0) {
+	    i++;
+	    if (i >= argc) {
+		fprintf(stderr, "No password supplied with --pw");
+		goto End;
+	    }
+	    password = argv[i];
+	} else {
+	    fprintf(stderr, "Unknown option: %ls\n", argv[i]);
+	    usage();
+	    goto End;
+	}
+    }
 
-   if (print_usertok) {
-       printf("**** Calling user token:\n");
-       print_tokinfo(NULL);
-       goto End;
-   }
+    if (print_usertok) {
+	printf("**** Calling user token:\n");
+	print_tokinfo(NULL);
+	goto End;
+    }
 
-   if (i >= argc) {
-       fprintf(stderr, "No user argument given\n");
-       usage();
-       goto End;
-   }
+    if (i >= argc) {
+	fprintf(stderr, "No user argument given\n");
+	usage();
+	goto End;
+    }
 
-   //
-   // Get DOMAIN and USERNAME from command line.
-   //
-   szDomain = _tcstok_s(argv[i], seps, &next_token);
-   if (szDomain == NULL) {
-      fprintf(stderr, "Unable to parse command line.\n");
-      usage();
-      goto End;
-   }
+    //
+    // Get DOMAIN and USERNAME from command line.
+    //
+    szDomain = _tcstok_s(argv[i], seps, &next_token);
+    if (szDomain == NULL) {
+	fprintf(stderr, "Unable to parse command line.\n");
+	usage();
+	goto End;
+    }
 
-   szUsername = _tcstok_s(NULL, seps, &next_token);
-   if (szUsername == NULL)
-   {
-      fprintf(stderr, "Unable to parse command line.\n");
-      usage();
-      goto End;
-   }
+    szUsername = _tcstok_s(NULL, seps, &next_token);
+    if (szUsername == NULL)
+	{
+	    fprintf(stderr, "Unable to parse command line.\n");
+	    usage();
+	    goto End;
+	}
 
-   //
-   // Check if account is local or not
-   //
-   if (_tcscmp(szDomain, TEXT(".")))
-      bIsLocal = FALSE;
+    //
+    // Check if account is local or not
+    //
+    if (_tcscmp(szDomain, TEXT(".")))
+	bIsLocal = FALSE;
 
-   //
-   // Get OS version
-   //
-   ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
-   osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    //
+    // Get OS version
+    //
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 
 #pragma warning(suppress : 4996; suppress : 28159)
-   if (!GetVersionEx(&osvi)) {
-       print_err("GetVersionEx", GetLastError());
-       goto End;
-   }
+    if (!GetVersionEx(&osvi)) {
+	print_err("GetVersionEx", GetLastError());
+	goto End;
+    }
 
-   //
-   // Activate the required privileges
-   //
-   // see https://docs.microsoft.com/en-us/windows/win32/secauthz/privilege-constants
-   //
-   OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
-   // SeTcbPrivilege User Right: Act as part of the operating system.
-   if (!SetPrivilege(hToken, SE_TCB_NAME, TRUE))
-   {
-      goto End;
-   }
-   // SeIncreaseQuotaPrivilege User Right: Adjust memory quotas for a process.
-   if (!SetPrivilege(hToken, SE_INCREASE_QUOTA_NAME, TRUE))
-   {
-       goto End;
-   }
-   // SeAssignPrimaryTokenPrivilege User Right: Replace a process-level token.
-   if (!SetPrivilege(hToken, SE_ASSIGNPRIMARYTOKEN_NAME, TRUE))
-   {
-       goto End;
-   }
-
-#if 0
-   /*
-    * Can't get seCreateTokenPrivilege this way, have to impersonate
-    * lsass.exe.
-    */
-   if (!SetPrivilege(hToken, SE_CREATE_TOKEN_NAME, TRUE))
-   {
-       goto End;
-   }
-#endif
-   if (!SetPrivilege(hToken, SE_TAKE_OWNERSHIP_NAME, TRUE))
-   {
-       goto End;
-   }
-   if (!SetPrivilege(hToken, SE_SECURITY_NAME, TRUE))
-   {
-       goto End;
-   }
-
-   //
-   // Get logon SID
-   //
-   if (add_logon_sid) {
-       err = get_logon_sid(hToken, &logon_sid);
-       if (err){
-	   print_err("Unable to get logon SID", err);
-	   goto End;
-       } else if (logon_sid) {
-	   print_sid("logon_sid", logon_sid);
-       } else {
-	   printf("Logon SID not present\n");
-       }
-   }
-
-   LSA_STRING name;
-   LSA_OPERATIONAL_MODE dummy1;
-
-   if (use_lsa) {
-       /* Use LsaLogonUser. */
-
-       /* Interactive, get a token we can use for that. */
-       InitLsaString(&name, "S4U");
-       Status = LsaRegisterLogonProcess(&name, &hLsa, &dummy1);
-       if (Status != STATUS_SUCCESS) {
-	   print_err("LsaRegisterLogonProcess",
-		     LsaNtStatusToWinError(Status));
-	   goto End;
-       }
-
-       //
-       // Lookup for the MSV1_0 authentication package (NTLMSSP)
-       //
-       InitLsaString(&Msv1_0Name, MSV1_0_PACKAGE_NAME);
-       Status = LsaLookupAuthenticationPackage(hLsa, &Msv1_0Name,
-					       &ulAuthenticationPackage);
-       if (Status != STATUS_SUCCESS) {
-	   print_err("LsaLookupAuthenticationPackage",
-		     LsaNtStatusToWinError(Status));
-	   goto End;
-       }
-
-       //
-       // If account is not local to your system, we must set an
-       // option to allow domain account. However, the account must be
-       // in the domain accounts logon cache.  This option appears
-       // with Windows 8/Server 2012.
-       //
-       if ((!bIsLocal) &&
-	   ((osvi.dwMajorVersion > 6) || ((osvi.dwMajorVersion == 6) &&
-					  (osvi.dwMinorVersion > 2)))) {
-	   NTSTATUS ProtocolStatus;
-	   PVOID pvReturnBuffer = NULL;
-	   ULONG ulReturnBufferLength;
-
-	   //
-	   // Create MSV_1_0_SET_OPTION structure
-	   //
-	   memset(&SetOption, 0, sizeof(SetOption));
-	   SetOption.MessageType = MsV1_0SetProcessOption;
-	   SetOption.dwFlag = 0x20;
-
-	   auth_info_len = sizeof(SetOption);
-
-	   //
-	   // Call LSA LsaCallAuthenticationPackage
-	   //
-	   Status = LsaCallAuthenticationPackage(hLsa,
-						 ulAuthenticationPackage,
-						 &SetOption,
-						 auth_info_len,
-						 &pvReturnBuffer,
-						 &ulReturnBufferLength,
-						 &ProtocolStatus);
-	   if (Status != STATUS_SUCCESS) {
-	       print_err("LsaCallAuthenticationPackage",
-			 LsaNtStatusToWinError(Status));
-	       goto End;
-	   }
-       }
-
-       if (use_s4u) {
-	   PMSV1_0_S4U_LOGON pS4uLogon;
-
-	   //
-	   // Create MSV1_0_S4U_LOGON structure
-	   //
-	   auth_info_len = (sizeof(MSV1_0_S4U_LOGON) +
-			    ((wcslen(szDomain) + 1 +
-			      wcslen(szUsername) + 1) * sizeof(WCHAR)));
-	   pS4uLogon = (PMSV1_0_S4U_LOGON)malloc(auth_info_len);
-	   if (pS4uLogon == NULL) {
-	       print_err("malloc", GetLastError());
-	       goto End;
-	   }
-
-	   pS4uLogon->MessageType = MsV1_0S4ULogon;
-	   pbPosition = (PBYTE)pS4uLogon + sizeof(MSV1_0_S4U_LOGON);
-	   pbPosition = InitUnicodeString(&pS4uLogon->UserPrincipalName,
-					  szUsername, pbPosition);
-	   pbPosition = InitUnicodeString(&pS4uLogon->DomainName, szDomain,
-					  pbPosition);
-	   auth_info = (void *) pS4uLogon;
-	   logon_type = Network;
-       } else {
-	   MSV1_0_INTERACTIVE_LOGON *mi_logon;
-
-	   if (!password) {
-	       fprintf(stderr,
-		       "You must use a password unless using lsa s4u\n");
-	       goto End;
-	   }
-
-	   auth_info_len = (sizeof(*mi_logon) +
-			    ((wcslen(szDomain) + 1 +
-			      wcslen(szUsername) + 1 +
-			      wcslen(password) + 1) * sizeof(WCHAR)));
-	   mi_logon = (MSV1_0_INTERACTIVE_LOGON *) malloc(auth_info_len);
-	   if (!mi_logon) {
-	       print_err("malloc", GetLastError());
-	       goto End;
-	   }
-	   mi_logon->MessageType = MsV1_0InteractiveLogon;
-	   pbPosition = ((PBYTE) mi_logon) + sizeof(*mi_logon);
-	   pbPosition = InitUnicodeString(&mi_logon->LogonDomainName,
-					  szDomain, pbPosition);
-	   pbPosition = InitUnicodeString(&mi_logon->UserName,
-					  szUsername, pbPosition);
-	   pbPosition = InitUnicodeString(&mi_logon->Password,
-					  password, pbPosition);
-	   auth_info = (void *) mi_logon;
-	   logon_type = Interactive;
-       }
-
-       //
-       // Misc
-       //
-       strcpy_s(TokenSource.SourceName, TOKEN_SOURCE_LENGTH, "S4UWin");
-       InitLsaString(&OriginName, "S4U for Windows");
-       AllocateLocallyUniqueId(&TokenSource.SourceIdentifier);
-
-       //
-       // Add extra SID to token.
-       //
-       // If the application needs to connect to a Windows Desktop,
-       // Logon SID must be added to the Token.
-       //
-       len = sizeof(TOKEN_GROUPS) + ((1 + add_groups_len) *
-				     sizeof(SID_AND_ATTRIBUTES));
-       extra_groups = (TOKEN_GROUPS *) malloc(len);
-       if (!extra_groups) {
-	   fprintf(stderr, "Allocate extra groups failed.\n");
-	   goto End;
-       }
-       memset(extra_groups, 0, len);
-
-       //
-       // Add Logon Sid, if present.
-       //
-       if (logon_sid)
-	   append_group(extra_groups, logon_sid, NULL,
-			(SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT |
-			 SE_GROUP_MANDATORY));
-
-       //
-       // Add other groups from a list.
-       //
-       if (add_extra_sids) {
-	   for (i = 0; i < add_groups_len; i++) {
-	       err = append_group(extra_groups, NULL, add_groups[i].name,
-				  (SE_GROUP_ENABLED |
-				   SE_GROUP_ENABLED_BY_DEFAULT |
-				   SE_GROUP_MANDATORY));
-	       if (err) {
-		   print_err("Unable to internal user-supplied group", err);
-		   goto End;
-	       }
-	   }
-       }
-
-       //
-       // Call LSA LsaLogonUser
-       //
-       // This call required SeTcbPrivilege privilege:
-       //    - [1] to get a primary token (vs impersonation token).
-       //	The privilege MUST be activated.
-       //    - [2] to add supplemental SID with LocalGroups parameter.
-       //    - [3] to use a username with a domain name different from
-       //	machine name (or '.').
-       //
-       Status = LsaLogonUser(hLsa,
-			     &OriginName,
-			     logon_type,
-			     ulAuthenticationPackage,
-			     auth_info,
-			     auth_info_len,
-			     extra_groups,
-			     &TokenSource,
-			     &pvProfile,
-			     &dwProfile,
-			     &logonId,
-			     &logon_tok,
-			     &quotaLimits,
-			     &SubStatus);
-       if (Status != STATUS_SUCCESS) {
-	   print_err("LsaLogonUser", LsaNtStatusToWinError(Status));
-	   goto End;
-       }
-
-       printf("LsaLogonUser: OK, LogonId: 0x%x-0x%x\n",
-	      logonId.HighPart, logonId.LowPart);
+    //
+    // Activate the required privileges
+    //
+    // see https://docs.microsoft.com/en-us/windows/win32/secauthz/privilege-constants
+    //
+    OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
+    // SeTcbPrivilege User Right: Act as part of the operating system.
+    if (!SetPrivilege(hToken, SE_TCB_NAME, TRUE))
+	{
+	    goto End;
+	}
+    // SeIncreaseQuotaPrivilege User Right: Adjust memory quotas for a process.
+    if (!SetPrivilege(hToken, SE_INCREASE_QUOTA_NAME, TRUE))
+	{
+	    goto End;
+	}
+    // SeAssignPrimaryTokenPrivilege User Right: Replace a process-level token.
+    if (!SetPrivilege(hToken, SE_ASSIGNPRIMARYTOKEN_NAME, TRUE))
+	{
+	    goto End;
+	}
 
 #if 0
-       //
-       // Use NtCreateToken() to create a new token based upon the
-       // LsaLogonUser token.
-       //
-       HANDLE htok;
-       err = create_token_from_existing_token(logon_tok, &htok);
-       if (err)
-	   goto End;
-       printf("***NTCreateToken:\n");
-       pr_token_info(htok);
-       CloseHandle(htok);
+    /*
+     * Can't get seCreateTokenPrivilege this way, have to impersonate
+     * lsass.exe.
+     */
+    if (!SetPrivilege(hToken, SE_CREATE_TOKEN_NAME, TRUE))
+	{
+	    goto End;
+	}
+#endif
+    if (!SetPrivilege(hToken, SE_TAKE_OWNERSHIP_NAME, TRUE))
+	{
+	    goto End;
+	}
+    if (!SetPrivilege(hToken, SE_SECURITY_NAME, TRUE))
+	{
+	    goto End;
+	}
+
+    //
+    // Get logon SID
+    //
+    if (add_logon_sid) {
+	err = get_logon_sid(hToken, &logon_sid);
+	if (err){
+	    print_err("Unable to get logon SID", err);
+	    goto End;
+	} else if (logon_sid) {
+	    print_sid("logon_sid", logon_sid);
+	} else {
+	    printf("Logon SID not present\n");
+	}
+    }
+
+    LSA_STRING name;
+    LSA_OPERATIONAL_MODE dummy1;
+
+    if (use_lsa) {
+	/* Use LsaLogonUser. */
+
+	/* Interactive, get a token we can use for that. */
+	InitLsaString(&name, "S4U");
+	Status = LsaRegisterLogonProcess(&name, &hLsa, &dummy1);
+	if (Status != STATUS_SUCCESS) {
+	    print_err("LsaRegisterLogonProcess",
+		      LsaNtStatusToWinError(Status));
+	    goto End;
+	}
+
+	//
+	// Lookup for the MSV1_0 authentication package (NTLMSSP)
+	//
+	InitLsaString(&Msv1_0Name, MSV1_0_PACKAGE_NAME);
+	Status = LsaLookupAuthenticationPackage(hLsa, &Msv1_0Name,
+						&ulAuthenticationPackage);
+	if (Status != STATUS_SUCCESS) {
+	    print_err("LsaLookupAuthenticationPackage",
+		      LsaNtStatusToWinError(Status));
+	    goto End;
+	}
+
+	//
+	// If account is not local to your system, we must set an
+	// option to allow domain account. However, the account must be
+	// in the domain accounts logon cache.  This option appears
+	// with Windows 8/Server 2012.
+	//
+	if ((!bIsLocal) &&
+	    ((osvi.dwMajorVersion > 6) || ((osvi.dwMajorVersion == 6) &&
+					   (osvi.dwMinorVersion > 2)))) {
+	    NTSTATUS ProtocolStatus;
+	    PVOID pvReturnBuffer = NULL;
+	    ULONG ulReturnBufferLength;
+
+	    //
+	    // Create MSV_1_0_SET_OPTION structure
+	    //
+	    memset(&SetOption, 0, sizeof(SetOption));
+	    SetOption.MessageType = MsV1_0SetProcessOption;
+	    SetOption.dwFlag = 0x20;
+
+	    auth_info_len = sizeof(SetOption);
+
+	    //
+	    // Call LSA LsaCallAuthenticationPackage
+	    //
+	    Status = LsaCallAuthenticationPackage(hLsa,
+						  ulAuthenticationPackage,
+						  &SetOption,
+						  auth_info_len,
+						  &pvReturnBuffer,
+						  &ulReturnBufferLength,
+						  &ProtocolStatus);
+	    if (Status != STATUS_SUCCESS) {
+		print_err("LsaCallAuthenticationPackage",
+			  LsaNtStatusToWinError(Status));
+		goto End;
+	    }
+	}
+
+	if (use_s4u) {
+	    PMSV1_0_S4U_LOGON pS4uLogon;
+
+	    //
+	    // Create MSV1_0_S4U_LOGON structure
+	    //
+	    auth_info_len = (sizeof(MSV1_0_S4U_LOGON) +
+			     ((wcslen(szDomain) + 1 +
+			       wcslen(szUsername) + 1) * sizeof(WCHAR)));
+	    pS4uLogon = (PMSV1_0_S4U_LOGON)malloc(auth_info_len);
+	    if (pS4uLogon == NULL) {
+		print_err("malloc", GetLastError());
+		goto End;
+	    }
+
+	    pS4uLogon->MessageType = MsV1_0S4ULogon;
+	    pbPosition = (PBYTE)pS4uLogon + sizeof(MSV1_0_S4U_LOGON);
+	    pbPosition = InitUnicodeString(&pS4uLogon->UserPrincipalName,
+					   szUsername, pbPosition);
+	    pbPosition = InitUnicodeString(&pS4uLogon->DomainName, szDomain,
+					   pbPosition);
+	    auth_info = (void *) pS4uLogon;
+	    logon_type = Network;
+	} else {
+	    MSV1_0_INTERACTIVE_LOGON *mi_logon;
+
+	    if (!password) {
+		fprintf(stderr,
+			"You must use a password unless using lsa s4u\n");
+		goto End;
+	    }
+
+	    auth_info_len = (sizeof(*mi_logon) +
+			     ((wcslen(szDomain) + 1 +
+			       wcslen(szUsername) + 1 +
+			       wcslen(password) + 1) * sizeof(WCHAR)));
+	    mi_logon = (MSV1_0_INTERACTIVE_LOGON *) malloc(auth_info_len);
+	    if (!mi_logon) {
+		print_err("malloc", GetLastError());
+		goto End;
+	    }
+	    mi_logon->MessageType = MsV1_0InteractiveLogon;
+	    pbPosition = ((PBYTE) mi_logon) + sizeof(*mi_logon);
+	    pbPosition = InitUnicodeString(&mi_logon->LogonDomainName,
+					   szDomain, pbPosition);
+	    pbPosition = InitUnicodeString(&mi_logon->UserName,
+					   szUsername, pbPosition);
+	    pbPosition = InitUnicodeString(&mi_logon->Password,
+					   password, pbPosition);
+	    auth_info = (void *) mi_logon;
+	    logon_type = Interactive;
+	}
+
+	//
+	// Misc
+	//
+	strcpy_s(TokenSource.SourceName, TOKEN_SOURCE_LENGTH, "S4UWin");
+	InitLsaString(&OriginName, "S4U for Windows");
+	AllocateLocallyUniqueId(&TokenSource.SourceIdentifier);
+
+	//
+	// Add extra SID to token.
+	//
+	// If the application needs to connect to a Windows Desktop,
+	// Logon SID must be added to the Token.
+	//
+	len = sizeof(TOKEN_GROUPS) + ((1 + add_groups_len) *
+				      sizeof(SID_AND_ATTRIBUTES));
+	extra_groups = (TOKEN_GROUPS *) malloc(len);
+	if (!extra_groups) {
+	    fprintf(stderr, "Allocate extra groups failed.\n");
+	    goto End;
+	}
+	memset(extra_groups, 0, len);
+
+	//
+	// Add Logon Sid, if present.
+	//
+	if (logon_sid)
+	    append_group(extra_groups, logon_sid, NULL,
+			 (SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT |
+			  SE_GROUP_MANDATORY));
+
+	//
+	// Add other groups from a list.
+	//
+	if (add_extra_sids) {
+	    for (i = 0; i < add_groups_len; i++) {
+		err = append_group(extra_groups, NULL, add_groups[i].name,
+				   (SE_GROUP_ENABLED |
+				    SE_GROUP_ENABLED_BY_DEFAULT |
+				    SE_GROUP_MANDATORY));
+		if (err) {
+		    print_err("Unable to internal user-supplied group", err);
+		    goto End;
+		}
+	    }
+	}
+
+	//
+	// Call LSA LsaLogonUser
+	//
+	// This call required SeTcbPrivilege privilege:
+	//    - [1] to get a primary token (vs impersonation token).
+	//	The privilege MUST be activated.
+	//    - [2] to add supplemental SID with LocalGroups parameter.
+	//    - [3] to use a username with a domain name different from
+	//	machine name (or '.').
+	//
+	Status = LsaLogonUser(hLsa,
+			      &OriginName,
+			      logon_type,
+			      ulAuthenticationPackage,
+			      auth_info,
+			      auth_info_len,
+			      extra_groups,
+			      &TokenSource,
+			      &pvProfile,
+			      &dwProfile,
+			      &logonId,
+			      &logon_tok,
+			      &quotaLimits,
+			      &SubStatus);
+	if (Status != STATUS_SUCCESS) {
+	    print_err("LsaLogonUser", LsaNtStatusToWinError(Status));
+	    goto End;
+	}
+
+	printf("LsaLogonUser: OK, LogonId: 0x%x-0x%x\n",
+	       logonId.HighPart, logonId.LowPart);
+
+#if 0
+	//
+	// Use NtCreateToken() to create a new token based upon the
+	// LsaLogonUser token.
+	//
+	HANDLE htok;
+	err = create_token_from_existing_token(logon_tok, &htok);
+	if (err)
+	    goto End;
+	printf("***NTCreateToken:\n");
+	pr_token_info(htok);
+	CloseHandle(htok);
 #endif
 
-       //
-       // Load the user profile.
-       //
-       pInteractiveProfile = (PMSV1_0_INTERACTIVE_PROFILE)pvProfile;
-       if (pInteractiveProfile->MessageType == MsV1_0InteractiveProfile)
-	   profileInfo.lpServerName = pInteractiveProfile->LogonServer.Buffer;
-       profileInfo.dwSize = sizeof(profileInfo);
-       profileInfo.dwFlags = PI_NOUI;
-       profileInfo.lpUserName = szUsername;
-       if (!LoadUserProfile(logon_tok, &profileInfo)) {
-	   print_err("LoadUserProfile", GetLastError());
-	   goto End;
-       }
+	//
+	// Load the user profile.
+	//
+	pInteractiveProfile = (PMSV1_0_INTERACTIVE_PROFILE)pvProfile;
+	if (pInteractiveProfile->MessageType == MsV1_0InteractiveProfile)
+	    profileInfo.lpServerName = pInteractiveProfile->LogonServer.Buffer;
+	profileInfo.dwSize = sizeof(profileInfo);
+	profileInfo.dwFlags = PI_NOUI;
+	profileInfo.lpUserName = szUsername;
+	if (!LoadUserProfile(logon_tok, &profileInfo)) {
+	    print_err("LoadUserProfile", GetLastError());
+	    goto End;
+	}
 
-   } else {
-       if (!password) {
-	   fprintf(stderr,
-		   "You must use a password unless using lsa s4u\n");
-	   goto End;
-       }
+    } else {
+	if (!password) {
+	    fprintf(stderr,
+		    "You must use a password unless using lsa s4u\n");
+	    goto End;
+	}
 
-       if (!LogonUser(szUsername, NULL, password, LOGON32_LOGON_INTERACTIVE,
-		      LOGON32_PROVIDER_DEFAULT, &logon_tok)) {
-	   print_err("LogonUser", GetLastError());
-	   goto End;
-       }
-   }
+	if (!LogonUser(szUsername, NULL, password, LOGON32_LOGON_INTERACTIVE,
+		       LOGON32_PROVIDER_DEFAULT, &logon_tok)) {
+	    print_err("LogonUser", GetLastError());
+	    goto End;
+	}
+    }
 
-   //
-   // Load the user environment variables.
-   //
-   if (!CreateEnvironmentBlock(&lpUserEnvironment, logon_tok, FALSE)) {
-       print_err("CreateEnvironmentBlock", GetLastError());
-       goto End;
-   }
+    //
+    // Load the user environment variables.
+    //
+    if (!CreateEnvironmentBlock(&lpUserEnvironment, logon_tok, FALSE)) {
+	print_err("CreateEnvironmentBlock", GetLastError());
+	goto End;
+    }
 
-   if (!do_privileged) {
-       err = setup_process_token(&logon_tok, false);
-       if (err) {
-	   print_err("setup_process_token", err);
-	   goto End;
-       }
-   }
+    if (!do_privileged) {
+	err = setup_process_token(&logon_tok, false);
+	if (err) {
+	    print_err("setup_process_token", err);
+	    goto End;
+	}
+    }
 
-   si.cb = sizeof(STARTUPINFO);
-   si.lpDesktop = TEXT("winsta0\\default");
+    si.cb = sizeof(STARTUPINFO);
+    si.lpDesktop = TEXT("winsta0\\default");
 
-   //
-   // Warning: szCommandLine parameter of CreateProcessAsUser() must
-   // be writable
-   //
-   szCommandLine = (LPTSTR) malloc(MAX_PATH * sizeof(TCHAR));
-   if (szCommandLine == NULL) {
-       fprintf(stderr, "HeapAlloc failed (error %u).\n", GetLastError());
-       goto End;
-   }
+    //
+    // Warning: szCommandLine parameter of CreateProcessAsUser() must
+    // be writable
+    //
+    szCommandLine = (LPTSTR) malloc(MAX_PATH * sizeof(TCHAR));
+    if (szCommandLine == NULL) {
+	fprintf(stderr, "HeapAlloc failed (error %u).\n", GetLastError());
+	goto End;
+    }
 
-   if (!ExpandEnvironmentStrings(szSrcCommandLine, szCommandLine, MAX_PATH)) {
-       print_err("ExpandEnvironmentStrings", GetLastError());
-       goto End;
-   }
+    if (!ExpandEnvironmentStrings(szSrcCommandLine, szCommandLine, MAX_PATH)) {
+	print_err("ExpandEnvironmentStrings", GetLastError());
+	goto End;
+    }
 
-   //
-   // Get the User Profile directory.
-   //
-   // NB we could also have used the GetUserProfileDirectory function; but
-   //    this way we do not have to deal with memory allocation.
-   //
-   for (LPCWSTR env = (LPCWSTR)lpUserEnvironment; *env; env += wcslen(env) + 1)
-   {
-       if (!(wcsncmp(env, L"USERPROFILE=", wcslen(L"USERPROFILE=")))) {
-           userProfileDirectory = env + wcslen(L"USERPROFILE=");
-           break;
-       }
-   }
+    //
+    // Get the User Profile directory.
+    //
+    // NB we could also have used the GetUserProfileDirectory function; but
+    //    this way we do not have to deal with memory allocation.
+    //
+    for (LPCWSTR env = (LPCWSTR)lpUserEnvironment; *env;
+		 env += wcslen(env) + 1) {
+	if (!(wcsncmp(env, L"USERPROFILE=", wcslen(L"USERPROFILE=")))) {
+	    userProfileDirectory = env + wcslen(L"USERPROFILE=");
+	    break;
+	}
+    }
 
-   HANDLE tmph;
-   if (!DuplicateTokenEx(logon_tok,
-			 TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
-			 NULL, SecurityAnonymous, TokenPrimary, &tmph)) {
-       print_err("Duplicate token", GetLastError());
-       goto End;
-   }
-   CloseHandle(logon_tok);
-   logon_tok = tmph;
+    HANDLE tmph;
+    if (!DuplicateTokenEx(logon_tok,
+			  TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
+			  NULL, SecurityAnonymous, TokenPrimary, &tmph)) {
+	print_err("Duplicate token", GetLastError());
+	goto End;
+    }
+    CloseHandle(logon_tok);
+    logon_tok = tmph;
 
-   //
-   // CreateProcessAsUser requires these privileges to be available in
-   // the current process:
-   //
-   //   SeTcbPrivilege (must be Enabled)
-   //   SeAssignPrimaryTokenPrivilege (can be Disabled, will be
-   //		automatically Enabled)
-   //   SeIncreaseQuotaPrivilege (can be Disabled, will be automatically
-   //		Enabled)
-   //
-   if (!CreateProcessAsUser(logon_tok,
-			    NULL,
-			    szCommandLine,
-			    NULL,
-			    NULL,
-			    FALSE,
-			    NORMAL_PRIORITY_CLASS | CREATE_UNICODE_ENVIRONMENT,
-			    lpUserEnvironment,
-			    userProfileDirectory,
-			    &si,
-			    &pi)) {
-       print_err("CreateProcessAsUser", GetLastError());
-       goto End;
-   }
+    //
+    // CreateProcessAsUser requires these privileges to be available in
+    // the current process:
+    //
+    //   SeTcbPrivilege (must be Enabled)
+    //   SeAssignPrimaryTokenPrivilege (can be Disabled, will be
+    //		automatically Enabled)
+    //   SeIncreaseQuotaPrivilege (can be Disabled, will be automatically
+    //		Enabled)
+    //
+    if (!CreateProcessAsUser(logon_tok,
+			     NULL,
+			     szCommandLine,
+			     NULL,
+			     NULL,
+			     FALSE,
+			     (NORMAL_PRIORITY_CLASS |
+			      CREATE_UNICODE_ENVIRONMENT),
+			     lpUserEnvironment,
+			     userProfileDirectory,
+			     &si,
+			     &pi)) {
+	print_err("CreateProcessAsUser", GetLastError());
+	goto End;
+    }
 
-   exitCode = EXIT_SUCCESS;
+    exitCode = EXIT_SUCCESS;
 
-End:
-   if (Msv1_0Name.Buffer)
-       free(Msv1_0Name.Buffer);
-   if (OriginName.Buffer)
-       free(OriginName.Buffer);
-   if (logon_sid)
-       free(logon_sid);
-   if (pExtraSid)
-      LocalFree(pExtraSid);
-   if (auth_info)
-      free(auth_info);
-   if (extra_groups)
-      free(extra_groups);
-   if (pvProfile)
-      LsaFreeReturnBuffer(pvProfile);
-   if (hLsa)
-      LsaClose(hLsa);
-   if (lpUserEnvironment)
-      DestroyEnvironmentBlock(lpUserEnvironment);
-   if (profileInfo.hProfile)
-      UnloadUserProfile(logon_tok, profileInfo.hProfile);
-   if (hToken)
-      CloseHandle(hToken);
-   if (logon_tok)
-      CloseHandle(logon_tok);
-   if (pi.hThread)
-      CloseHandle(pi.hThread);
-   if (pi.hProcess)
-   {
-      WaitForSingleObject(pi.hProcess, INFINITE);
-      CloseHandle(pi.hProcess);
-   }
+ End:
+    if (Msv1_0Name.Buffer)
+	free(Msv1_0Name.Buffer);
+    if (OriginName.Buffer)
+	free(OriginName.Buffer);
+    if (logon_sid)
+	free(logon_sid);
+    if (pExtraSid)
+	LocalFree(pExtraSid);
+    if (auth_info)
+	free(auth_info);
+    if (extra_groups)
+	free(extra_groups);
+    if (pvProfile)
+	LsaFreeReturnBuffer(pvProfile);
+    if (hLsa)
+	LsaClose(hLsa);
+    if (lpUserEnvironment)
+	DestroyEnvironmentBlock(lpUserEnvironment);
+    if (profileInfo.hProfile)
+	UnloadUserProfile(logon_tok, profileInfo.hProfile);
+    if (hToken)
+	CloseHandle(hToken);
+    if (logon_tok)
+	CloseHandle(logon_tok);
+    if (pi.hThread)
+	CloseHandle(pi.hThread);
+    if (pi.hProcess) {
+	WaitForSingleObject(pi.hProcess, INFINITE);
+	CloseHandle(pi.hProcess);
+    }
 
-   return exitCode;
+    return exitCode;
 }
