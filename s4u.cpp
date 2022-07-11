@@ -287,45 +287,38 @@ SetPrivilege(HANDLE hToken,
     if (!LookupPrivilegeValue(NULL,      // lookup privilege on local system
 			      lpszPrivilege,    // privilege to lookup
 			      &luid)) {         // receives LUID of privilege
-	fprintf(stderr, "LookupPrivilegeValue failed (error: %u).\n", GetLastError());
+	print_err("LookupPrivilegeValue", GetLastError());
 	return FALSE;
     }
 
-   tp.PrivilegeCount = 1;
-   tp.Privileges[0].Luid = luid;
-   if (bEnablePrivilege)
-      tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-   else
-      tp.Privileges[0].Attributes = 0;
+    tp.PrivilegeCount = 1;
+    tp.Privileges[0].Luid = luid;
+    if (bEnablePrivilege)
+	tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    else
+	tp.Privileges[0].Attributes = 0;
 
-   //
-   // Enable the privilege or disable all privileges.
-   //
-   if (!AdjustTokenPrivileges(
-      hToken,
-      FALSE,
-      &tp,
-      sizeof(TOKEN_PRIVILEGES),
-      (PTOKEN_PRIVILEGES)NULL,
-      (PDWORD)NULL))
-   {
-      fprintf(stderr, "AdjustTokenPrivileges failed (error: %u).\n", GetLastError());
-      return FALSE;
-   }
-   else
-   {
-      if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
-      {
-         fprintf(stderr, "The token does not have the specified privilege (%S).\n", lpszPrivilege);
-         return FALSE;
-      }
-      else
-      {
-         printf("AdjustTokenPrivileges (%S): OK\n", lpszPrivilege);
-      }
-   }
+    //
+    // Enable the privilege or disable all privileges.
+    //
+    if (!AdjustTokenPrivileges(hToken,
+			       FALSE,
+			       &tp,
+			       sizeof(TOKEN_PRIVILEGES),
+			       (PTOKEN_PRIVILEGES)NULL,
+			       (PDWORD)NULL)) {
+	print_err("AdjustTokenPrivileges", GetLastError());
+	return FALSE;
+    } else {
+	if (GetLastError() == ERROR_NOT_ALL_ASSIGNED) {
+	    fprintf(stderr,
+		    "The token does not have the specified privilege (%S).\n",
+		    lpszPrivilege);
+	    return FALSE;
+	}
+    }
 
-   return TRUE;
+    return TRUE;
 }
 
 DWORD
@@ -547,7 +540,7 @@ medium_mandatory_policy(HANDLE h)
 	return err;
 
     integrity_sid = (SID *) integrity->Label.Sid;
-    printf("RID was: 0x%x\n", integrity_sid->SubAuthority[0]);
+    //printf("RID was: 0x%x\n", integrity_sid->SubAuthority[0]);
     if (integrity_sid->SubAuthority[0] <= SECURITY_MANDATORY_MEDIUM_RID) {
 	free(integrity);
 	return 0;
