@@ -1009,6 +1009,20 @@ create_token_from_existing_token(HANDLE logon_tok, HANDLE *htok)
     return err;
 }
 
+static void
+usage(void)
+{
+    fprintf(stderr, "\ns4u.exe [options] Domain\\Username\n\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  --lsa - Use LsaLogonUser\n");
+    fprintf(stderr, "  --s4u - Do an S4U login with --lsa\n");
+    fprintf(stderr, "  --priv - Do not drop privileges\n");
+    fprintf(stderr, "  --lsid - Fetch a logon sid and use it with --lsa\n");
+    fprintf(stderr, "  --puser - Print the caller's token and quit\n");
+    fprintf(stderr, "  --esids - Add some extra interactive sids\n");
+    fprintf(stderr, "  --pw <str> - Use the given password\n");
+}
+
 int
 _tmain (int argc, TCHAR *argv[])
 {
@@ -1099,6 +1113,7 @@ _tmain (int argc, TCHAR *argv[])
 	   password = argv[i];
        } else {
 	   fprintf(stderr, "Unknown option: %ls\n", argv[i]);
+	   usage();
 	   goto End;
        }
    }
@@ -1110,8 +1125,9 @@ _tmain (int argc, TCHAR *argv[])
    }
 
    if (i >= argc) {
-      fprintf(stderr, "Usage:\n   s4u.exe Domain\\Username password\n\n");
-      goto End;
+       fprintf(stderr, "No user argument given\n");
+       usage();
+       goto End;
    }
 
    //
@@ -1120,6 +1136,7 @@ _tmain (int argc, TCHAR *argv[])
    szDomain = _tcstok_s(argv[i], seps, &next_token);
    if (szDomain == NULL) {
       fprintf(stderr, "Unable to parse command line.\n");
+      usage();
       goto End;
    }
 
@@ -1127,6 +1144,7 @@ _tmain (int argc, TCHAR *argv[])
    if (szUsername == NULL)
    {
       fprintf(stderr, "Unable to parse command line.\n");
+      usage();
       goto End;
    }
 
@@ -1192,14 +1210,16 @@ _tmain (int argc, TCHAR *argv[])
    //
    // Get logon SID
    //
-   err = get_logon_sid(hToken, &logon_sid);
-   if (err){
-       print_err("Unable to get logon SID", err);
-       goto End;
-   } else if (logon_sid) {
-       print_sid("logon_sid", logon_sid);
-   } else {
-       printf("Logon SID not present\n");
+   if (add_logon_sid) {
+       err = get_logon_sid(hToken, &logon_sid);
+       if (err){
+	   print_err("Unable to get logon SID", err);
+	   goto End;
+       } else if (logon_sid) {
+	   print_sid("logon_sid", logon_sid);
+       } else {
+	   printf("Logon SID not present\n");
+       }
    }
 
    LSA_STRING name;
@@ -1346,7 +1366,7 @@ _tmain (int argc, TCHAR *argv[])
        //
        // Add Logon Sid, if present.
        //
-       if (logon_sid && add_logon_sid)
+       if (logon_sid)
 	   append_group(extra_groups, logon_sid, NULL,
 			(SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT |
 			 SE_GROUP_MANDATORY));
