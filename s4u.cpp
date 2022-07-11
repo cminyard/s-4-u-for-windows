@@ -1059,6 +1059,7 @@ _tmain (int argc, TCHAR *argv[])
     LPTSTR szCommandLine = NULL;
     LPTSTR szSrcCommandLine = TEXT("%systemroot%\\system32\\cmd.exe");
     LPTSTR szDomain = NULL;
+    LPTSTR domain2 = NULL;
     LPTSTR szUsername = NULL;
     TCHAR seps[] = TEXT("\\");
     TCHAR *next_token = NULL;
@@ -1128,9 +1129,11 @@ _tmain (int argc, TCHAR *argv[])
     //
     if (_tcschr(argv[i], TEXT('\\'))) {
 	szDomain = _tcstok_s(argv[i], seps, &next_token);
+	domain2 = szDomain;
 	szUsername = _tcstok_s(NULL, seps, &next_token);
     } else {
 	szDomain = TEXT("");
+	domain2 = NULL;
 	szUsername = argv[i];
 	bIsLocal = TRUE;
     }
@@ -1441,7 +1444,8 @@ _tmain (int argc, TCHAR *argv[])
 	    goto End;
 	}
 
-	if (!LogonUser(szUsername, NULL, password, LOGON32_LOGON_INTERACTIVE,
+	if (!LogonUser(szUsername, domain2, password,
+		       LOGON32_LOGON_INTERACTIVE,
 		       LOGON32_PROVIDER_DEFAULT, &logon_tok)) {
 	    print_err("LogonUser", GetLastError());
 	    goto End;
