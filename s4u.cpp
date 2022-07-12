@@ -1,3 +1,9 @@
+/*
+ * WARNING - this program is a hack, it does not do proper password
+ * handling and you should, of course, never pass in passwords on the
+ * command line in a production program.
+ */
+
 #include <Windows.h>
 #include <Ntsecapi.h>
 #include <UserEnv.h>
@@ -976,10 +982,12 @@ create_token_from_existing_token(HANDLE logon_tok, HANDLE *htok)
     }
 
     if (!SetThreadToken(NULL, lstok)) {
+	CloseHandle(lstok);
 	err = GetLastError();
 	print_err("Set lsass token", err);
 	goto End;
     }
+    CloseHandle(lstok);
 
     Status = CreateToken(htok,
 			 TOKEN_ALL_ACCESS,
@@ -1406,9 +1414,6 @@ _tmain (int argc, TCHAR *argv[])
 	    goto End;
 	}
 
-	printf("LsaLogonUser: OK, LogonId: 0x%x-0x%x\n",
-	       logonId.HighPart, logonId.LowPart);
-
 #if 0
 	//
 	// Use NtCreateToken() to create a new token based upon the
@@ -1423,20 +1428,6 @@ _tmain (int argc, TCHAR *argv[])
 	CloseHandle(htok);
 #endif
 
-	//
-	// Load the user profile.
-	//
-	pInteractiveProfile = (PMSV1_0_INTERACTIVE_PROFILE)pvProfile;
-	if (pInteractiveProfile->MessageType == MsV1_0InteractiveProfile)
-	    profileInfo.lpServerName = pInteractiveProfile->LogonServer.Buffer;
-	profileInfo.dwSize = sizeof(profileInfo);
-	profileInfo.dwFlags = PI_NOUI;
-	profileInfo.lpUserName = szUsername;
-	if (!LoadUserProfile(logon_tok, &profileInfo)) {
-	    print_err("LoadUserProfile", GetLastError());
-	    goto End;
-	}
-
     } else {
 	if (!password) {
 	    fprintf(stderr,
@@ -1444,12 +1435,27 @@ _tmain (int argc, TCHAR *argv[])
 	    goto End;
 	}
 
-	if (!LogonUser(szUsername, domain2, password,
-		       LOGON32_LOGON_INTERACTIVE,
-		       LOGON32_PROVIDER_DEFAULT, &logon_tok)) {
+	if (!LogonUserEx(szUsername, domain2, password,
+			 LOGON32_LOGON_INTERACTIVE,
+			 LOGON32_PROVIDER_DEFAULT, &logon_tok,
+			 NULL, &pvProfile, &dwProfile, &quotaLimits)) {
 	    print_err("LogonUser", GetLastError());
 	    goto End;
 	}
+    }
+
+    //
+    // Load the user profile.
+    //
+    pInteractiveProfile = (PMSV1_0_INTERACTIVE_PROFILE)pvProfile;
+    if (pInteractiveProfile->MessageType == MsV1_0InteractiveProfile)
+	profileInfo.lpServerName = pInteractiveProfile->LogonServer.Buffer;
+    profileInfo.dwSize = sizeof(profileInfo);
+    profileInfo.dwFlags = PI_NOUI;
+    profileInfo.lpUserName = szUsername;
+    if (!LoadUserProfile(logon_tok, &profileInfo)) {
+	print_err("LoadUserProfile", GetLastError());
+	goto End;
     }
 
     //
