@@ -39,6 +39,17 @@ print_err(const char *str, DWORD err)
 }
 
 static void
+pr_err(int indent, const char *str, DWORD err)
+{
+      wchar_t errbuf[128];
+
+      FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL,
+		    err, 0, errbuf, sizeof(errbuf), NULL);
+      printf("%*s%s: ***fetch error: (0x%lx): %ls",
+	     indent, "", str, err, errbuf);
+}
+
+static void
 pr_sid(int indent, const char *str, SID *sid)
 {
     char *sidstr;
@@ -62,26 +73,25 @@ print_sid(const char *str, SID *sid)
 static void
 pr_sid_attr(int indent, const char *str, SID_AND_ATTRIBUTES *v)
 {
-    char *sidstr;
-
     printf("%*s%s:\n", indent, "", str);
     pr_sid(indent + 2, "Sid", (SID *) v->Sid);
-    printf("%*sAttributes: 0x%x\n", indent + 2, "", v->Attributes);
+    printf("%*sAttributes: 0x%lx\n", indent + 2, "", v->Attributes);
 }
 
 static void
 pr_sid_attr_hash(int indent, const char *str, SID_AND_ATTRIBUTES_HASH *v)
 {
-    unsigned int i;
+    DWORD i;
+    char buf[100];
 
     printf("%*s%s:\n", indent, "", str);
-    printf("%*sSidCount: %d\n", indent + 2, "", v->SidCount);
+    printf("%*sSidCount: %ld\n", indent + 2, "", v->SidCount);
     for (i = 0; i < v->SidCount; i++) {
-	printf("%*sSidAttr[%d]:", indent + 2, "", i);
-	pr_sid_attr(indent + 4, "", &v->SidAttr[i]);
+	snprintf(buf, sizeof(buf), "SidAttr[%ld]", i);
+	pr_sid_attr(indent + 2, buf, &v->SidAttr[i]);
     }
     for (i = 0; i < SID_HASH_SIZE; i++) {
-	printf("%*sHash[%d]: 0x%lx\n", indent + 2, "", i, v->Hash[i]);
+	printf("%*sHash[%ld]: 0x%llx\n", indent + 2, "", i, v->Hash[i]);
     }
 }
 
@@ -91,34 +101,342 @@ pr_luid(int indent, const char *str, LUID *v)
     char name[100] = "";
     DWORD len = sizeof(name);
     LookupPrivilegeNameA(NULL, v, name, &len);
-    printf("%*s%s: %s %d:%ld\n", indent, "", str, name,
+    printf("%*s%s: '%s' %ld:%ld\n", indent, "", str, name,
 	   v->LowPart, v->HighPart);
 }
 
 void
 pr_luid_and_attr(int indent, const char *str, LUID_AND_ATTRIBUTES *v)
 {
-    pr_luid(indent, "Luid", &v->Luid);
-    printf("%*sAttributes: 0x%x\n", indent, "", v->Attributes);
+    printf("%*s%s:\n", indent, "", str);
+    pr_luid(indent + 2, "Luid", &v->Luid);
+    printf("%*sAttributes: 0x%lx\n", indent + 2, "", v->Attributes);
+}
+
+void
+pr_guid(int indent, const char *str, GUID *v)
+{
+    printf("%*s%s: %ld:%d:%d:%d:%d:%d:%d:%d:%d:%d:%d\n", indent, "", str,
+	   v->Data1, v->Data2, v->Data3, v->Data4[0], v->Data4[1],
+	   v->Data4[2], v->Data4[3], v->Data4[4], v->Data4[5],
+	   v->Data4[6], v->Data4[7]);
 }
 
 void
 pr_token_priv(int indent, const char *str, TOKEN_PRIVILEGES *v)
 {
-    unsigned int i;
+    DWORD i;
+    char buf[100];
 
     printf("%*s%s:\n", indent, "", str);
-    printf("%*sPrivilegeCount: %d\n", indent + 2, "", v->PrivilegeCount);
+    printf("%*sPrivilegeCount: %ld\n", indent + 2, "", v->PrivilegeCount);
     for (i = 0; i < v->PrivilegeCount; i++) {
-	printf("%*sPrivileges[%d]:\n", indent + 2, "", i);
-	pr_luid_and_attr(indent + 4, "", &v->Privileges[i]);
+	snprintf(buf, sizeof(buf), "Privileges[%ld]", i);
+	pr_luid_and_attr(indent + 2, "", &v->Privileges[i]);
     }
 }
 
-void
+static void
+pr_ace(int indent, const char *str, ACE_HEADER *v)
+{
+    printf("%*s%s:\n", indent, "", str);
+    printf("%*sType: %d\n", indent + 2, "", v->AceType);
+    printf("%*sFlags: 0x%x\n", indent + 2, "", v->AceFlags);
+    printf("%*sSize: %d\n", indent + 2, "", v->AceSize);
+    switch(v->AceType) {
+    /* ACCESS_MIN_MS_ACE_qTYPE */
+    case ACCESS_ALLOWED_ACE_TYPE: {
+	ACCESS_ALLOWED_ACE *a = (ACCESS_ALLOWED_ACE *) v;
+	printf("%*sACCESS_ALLOWED:\n", indent + 2, "");
+	
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case ACCESS_ALLOWED_CALLBACK_ACE_TYPE: {
+	ACCESS_ALLOWED_CALLBACK_ACE *a = (ACCESS_ALLOWED_CALLBACK_ACE *) v;
+	printf("%*sACCESS_ALLOWED_CALLBACK:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case ACCESS_ALLOWED_CALLBACK_OBJECT_ACE_TYPE: {
+	ACCESS_ALLOWED_CALLBACK_OBJECT_ACE *a =
+	    (ACCESS_ALLOWED_CALLBACK_OBJECT_ACE *) v;
+	printf("%*sACCESS_ALLOWED_CALLBACK_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    /* case ACCESS_ALLOWED_COMPOUND_ACE_TYPE: */
+
+    /* ACCESS_MIN_MS_OBJECT_ACE_TYPE */
+    case ACCESS_ALLOWED_OBJECT_ACE_TYPE: {
+	ACCESS_ALLOWED_OBJECT_ACE *a = (ACCESS_ALLOWED_OBJECT_ACE *) v;
+	printf("%*sACCESS_ALLOWED_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case ACCESS_DENIED_ACE_TYPE: {
+	ACCESS_DENIED_ACE *a = (ACCESS_DENIED_ACE *) v;
+	printf("%*sACCESS_DENIED:\n", indent + 2, "");
+	
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case ACCESS_DENIED_CALLBACK_ACE_TYPE: {
+	ACCESS_DENIED_CALLBACK_ACE *a = (ACCESS_DENIED_CALLBACK_ACE *) v;
+	printf("%*sACCESS_DENIED_CALLBACK:\n", indent + 2, "");
+	
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case ACCESS_DENIED_CALLBACK_OBJECT_ACE_TYPE: {
+	ACCESS_DENIED_CALLBACK_OBJECT_ACE *a =
+	    (ACCESS_DENIED_CALLBACK_OBJECT_ACE *) v;
+	printf("%*sACCESS_DENIED_CALLBACK_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case ACCESS_DENIED_OBJECT_ACE_TYPE: {
+	ACCESS_DENIED_OBJECT_ACE *a = (ACCESS_DENIED_OBJECT_ACE *) v;
+	printf("%*sACCESS_DENIED_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    /* case ACCESS_MAX_MS_V2_ACE_TYPE: */
+    case SYSTEM_ALARM_ACE_TYPE: {
+	SYSTEM_ALARM_ACE *a = (SYSTEM_ALARM_ACE *) v;
+	printf("%*sSYSTEM_ALARM:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    /* case ACCESS_MAX_MS_V4_ACE_TYPE: */
+    /* case ACCESS_MAX_MS_OBJECT_ACE_TYPE: */
+    case SYSTEM_ALARM_CALLBACK_ACE_TYPE: {
+	SYSTEM_ALARM_CALLBACK_ACE *a = (SYSTEM_ALARM_CALLBACK_ACE *) v;
+	printf("%*sSYSTEM_ALARM_CALLBACK:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case SYSTEM_ALARM_CALLBACK_OBJECT_ACE_TYPE: {
+	SYSTEM_ALARM_CALLBACK_OBJECT_ACE *a =
+	    (SYSTEM_ALARM_CALLBACK_OBJECT_ACE *) v;
+	printf("%*sSYSTEM_ALARM_CALLBACK_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    /* case ACCESS_MAX_MS_V3_ACE_TYPE: */
+
+    /* case ACCESS_MAX_MS_ACE_TYPE: */
+    case SYSTEM_ALARM_OBJECT_ACE_TYPE: {
+	SYSTEM_ALARM_OBJECT_ACE *a = (SYSTEM_ALARM_OBJECT_ACE *) v;
+	printf("%*sSYSTEM_ALARM_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case SYSTEM_AUDIT_ACE_TYPE: {
+	SYSTEM_AUDIT_ACE *a = (SYSTEM_AUDIT_ACE *) v;
+	printf("%*sSYSTEM_AUDIT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case SYSTEM_AUDIT_CALLBACK_ACE_TYPE: {
+	SYSTEM_AUDIT_CALLBACK_ACE *a = (SYSTEM_AUDIT_CALLBACK_ACE *) v;
+	printf("%*sSYSTEM_AUDIT_CALLBACK:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case SYSTEM_AUDIT_CALLBACK_OBJECT_ACE_TYPE: {
+	SYSTEM_AUDIT_CALLBACK_OBJECT_ACE *a =
+	    (SYSTEM_AUDIT_CALLBACK_OBJECT_ACE *) v;
+	printf("%*sSYSTEM_AUDIT_CALLBACK_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case SYSTEM_AUDIT_OBJECT_ACE_TYPE: {
+	SYSTEM_AUDIT_OBJECT_ACE *a = (SYSTEM_AUDIT_OBJECT_ACE *) v;
+	printf("%*sSYSTEM_AUDIT_OBJECT:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	printf("%*sFlags: %lx\n", indent + 4, "", a->Flags);
+	pr_guid(indent + 4, "ObjectType", &a->ObjectType);
+	pr_guid(indent + 4, "InheritedObjectType", &a->InheritedObjectType);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    case SYSTEM_MANDATORY_LABEL_ACE_TYPE: {
+	SYSTEM_MANDATORY_LABEL_ACE *a = (SYSTEM_MANDATORY_LABEL_ACE *) v;
+	printf("%*sSYSTEM_MANDATORY_LABEL:\n", indent + 2, "");
+
+	printf("%*sMask: %lx\n", indent + 4, "", a->Mask);
+	pr_sid(indent + 4, "SID", (SID *) &a->SidStart);
+	break;
+    }
+
+    default:
+	printf("%*sUnknown ACE type\n", indent + 2, "");
+	break;
+    }
+}
+
+static void
+pr_acl(int indent, const char *str, ACL *v)
+{
+    unsigned int i;
+    ACL_REVISION_INFORMATION r;
+    ACL_SIZE_INFORMATION s;
+    char buf[100];
+
+    printf("%*s%s:\n", indent, "", str);
+    if (!GetAclInformation(v, &r, sizeof(r), AclRevisionInformation)) {
+	printf("%*sRevision: **Error fetching: %ld\n", indent + 2, "",
+	       GetLastError());
+    } else {
+	printf("%*sRevision: %ld\n", indent + 2, "", r.AclRevision);
+    }
+    if (!GetAclInformation(v, &s, sizeof(s), AclSizeInformation)) {
+	printf("%*sSize: **Error fetching: %ld\n", indent + 2, "",
+	       GetLastError());
+	return;
+    } else {
+	printf("%*sAceCount: %ld\n", indent + 2, "", s.AceCount);
+	printf("%*sBytesInUse: %ld\n", indent + 2, "", s.AclBytesInUse);
+	printf("%*sBytesFree: %ld\n", indent + 2, "", s.AclBytesFree);
+    }
+
+    for (i = 0; i < s.AceCount; i++) {
+	ACE_HEADER *a;
+
+	snprintf(buf, sizeof(buf), "Ace[%d]", i);
+	if (!GetAce(v, i, (void **) &a)) {
+	    printf("%*s%s: **Error fetching: %ld\n", indent + 4, "", buf,
+		   GetLastError());
+	    continue;
+	}
+	pr_ace(indent + 4, buf, a);
+    }
+}
+
+static void
+pr_token_groups(int indent, const char *str, TOKEN_GROUPS *v)
+{
+    DWORD i;
+    char buf[100];
+
+    printf("%*s%s:\n", indent, "", str);
+    for (i = 0; i < v->GroupCount; i++) {
+	snprintf(buf, sizeof(buf), "Group[%ld]", i);
+	pr_sid_attr(2, buf, &v->Groups[i]);
+    }
+}
+
+static void
+pr_token_groups_and_privileges(int indent, const char *str,
+			       TOKEN_GROUPS_AND_PRIVILEGES *v)
+{
+    DWORD i;
+    char buf[100];
+
+    printf("%*s%s:\n", indent, "", str);
+    printf("%*sSidCount: %ld\n", indent + 2, "", v->SidCount);
+    printf("%*sSidLength: %ld\n", indent + 2, "", v->SidLength);
+    for (i = 0; i < v->SidCount; i++) {
+	snprintf(buf, sizeof(buf), "Sids[%ld]", i);
+	pr_sid_attr(indent + 2, buf, &v->Sids[i]);
+    }
+    printf("%*sRestrictedSidCount: %ld\n", indent + 2, "",
+	   v->RestrictedSidCount);
+    printf("%*sRestrictedSidLength: %ld\n", indent + 2, "",
+	   v->RestrictedSidLength);
+    for (i = 0; i < v->RestrictedSidCount; i++) {
+	snprintf(buf, sizeof(buf), "RestrictedSids[%ld]", i);
+	pr_sid_attr(indent + 2, buf, &v->RestrictedSids[i]);
+    }
+    printf("%*sPrivilegeCount: %ld\n", indent + 2, "",
+	   v->PrivilegeCount);
+    printf("%*sPrivilegeLength: %ld\n", indent + 2, "",
+	   v->PrivilegeLength);
+    for (i = 0; i < v->PrivilegeCount; i++) {
+	snprintf(buf, sizeof(buf), "Privileges[%ld]", i);
+	pr_luid_and_attr(indent + 2, buf, &v->Privileges[i]);
+    }
+    pr_luid(indent + 2, "AuthenticationId", &v->AuthenticationId);
+}
+
+static void
+pr_token_source(int indent, const char *str, TOKEN_SOURCE *v)
+{
+    printf("%*s%s:\n", indent, "", str);
+    printf("%*sSourceName: %s\n", indent + 2, "", v->SourceName);
+    pr_luid(indent + 2, "SourceIdentifier", &v->SourceIdentifier);
+}
+
+static void
 pr_tok_mand_pol(int indent, const char *str, TOKEN_MANDATORY_POLICY *v)
 {
-    printf("%*s%s.Policy: %d\n", indent, "", str, v->Policy);
+    printf("%*s%s.Policy: %ld\n", indent, "", str, v->Policy);
 }
 
 static DWORD
@@ -145,6 +463,33 @@ read_token_info(HANDLE h, TOKEN_INFORMATION_CLASS type, void **rval,
     if (rlen)
 	*rlen = len;
     return 0;
+}
+
+static void
+pr_token_statistics(int indent, HANDLE h, const char *str)
+{
+    DWORD err;
+    TOKEN_STATISTICS *v;
+
+    printf("%*s%s:\n", indent, "", str);
+    err = read_token_info(h, TokenStatistics, (void **) &v, NULL);
+    if (err) {
+	pr_err(indent + 2, "**Fetch error", err);
+	return;
+    }
+
+    pr_luid(indent + 2, "Token Id", &v->TokenId);
+    pr_luid(indent + 2, "Authentication Id", &v->AuthenticationId);
+    printf("%*sExpiraton Time: %lld\n", indent + 2, "",
+	   v->ExpirationTime.QuadPart);
+    printf("%*sImpersonation level: %d\n", indent + 2, "",
+	   v->ImpersonationLevel);
+    printf("%*sDynamicCharged: %ld\n", indent + 2, "", v->DynamicCharged);
+    printf("%*sDynamicAvailable: %ld\n", indent + 2, "", v->DynamicAvailable);
+    printf("%*sGroupCount: %ld\n", indent + 2, "", v->GroupCount);
+    printf("%*sPrivilege count: %ld\n", indent + 2, "", v->PrivilegeCount);
+    pr_luid(indent + 2, "Modified Id", &v->ModifiedId);
+    free(v);
 }
 
 DWORD
@@ -186,34 +531,38 @@ struct ta2 {
 };
 
 static void
-pr_token_info(HANDLE h)
+pr_token_access_info(int indent, HANDLE h)
 {
     DWORD err;
-    struct ta2 *access_info = NULL;
+    struct ta2 *access_info;
 
+    printf("%*sAccess info:\n", indent, "");
     err = read_token_info(h, TokenAccessInformation, (void **) &access_info,
 			  NULL);
     if (err) {
-	print_err("Get access info", err);
+	pr_err(indent + 2, "Access info", err);
     } else {
-	printf("Access info:\n");
-	pr_sid_attr_hash(2, "SidHash", access_info->SidHash);
-	pr_sid_attr_hash(2, "RestrictedSidHash",
+	pr_sid_attr_hash(indent + 2, "SidHash", access_info->SidHash);
+	pr_sid_attr_hash(indent + 2, "RestrictedSidHash",
 			 access_info->RestrictedSidHash);
-	pr_token_priv(2, "Privileges", access_info->Privileges);
-	pr_luid(2, "AuthenticationId", &access_info->AuthenticationId);
-	printf("  TokenType: %d\n", access_info->TokenType);
-	printf("  ImpersonationLevel: %d\n", access_info->ImpersonationLevel);
-	pr_tok_mand_pol(2, "MandatoryPolicy", &access_info->MandatoryPolicy);
-	printf("  Flags: %d\n", access_info->Flags);
-	printf("  AppContainerNumber: %d\n", access_info->AppContainerNumber);
-	pr_sid(2, "PackageSid", (SID *) access_info->PackageSid);
-	pr_sid_attr_hash(2, "CapabilitiesHash", access_info->CapabilitiesHash);
-	pr_sid(2, "TrustLevelSid", (SID *) access_info->TrustLevelSid);
-    }
-
-    if (access_info)
+	pr_token_priv(indent + 2, "Privileges", access_info->Privileges);
+	pr_luid(indent + 2, "AuthenticationId",
+		&access_info->AuthenticationId);
+	printf("%*sTokenType: %d\n", indent + 2, "", access_info->TokenType);
+	printf("%*sImpersonationLevel: %d\n", indent + 2, "",
+	       access_info->ImpersonationLevel);
+	pr_tok_mand_pol(indent + 2, "MandatoryPolicy",
+			&access_info->MandatoryPolicy);
+	printf("%*sFlags: %ld\n", indent + 2, "", access_info->Flags);
+	printf("%*sAppContainerNumber: %ld\n", indent + 2, "",
+	       access_info->AppContainerNumber);
+	pr_sid(indent + 2, "PackageSid", (SID *) access_info->PackageSid);
+	pr_sid_attr_hash(indent + 2, "CapabilitiesHash",
+			 access_info->CapabilitiesHash);
+	pr_sid(indent + 2, "TrustLevelSid",
+	       (SID *) access_info->TrustLevelSid);
 	free(access_info);
+    }
 }
 
 static DWORD
@@ -227,51 +576,145 @@ get_dword_tokinfo(HANDLE h, TOKEN_INFORMATION_CLASS type, DWORD *val)
 }
 
 static void
+pr_dword_tokinfo(int indent, bool hex,
+		 HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD val, err;
+
+    err = get_dword_tokinfo(h, type, &val);
+    if (err)
+	pr_err(indent, str, err);
+    else if (hex)
+	printf("%*s%s: 0x%lx\n", indent, "", str, val);
+    else
+	printf("%*s%s: %lu\n", indent, "", str, val);
+}
+
+static void
+pr_int_tokinfo(int indent,
+	       HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    int val;
+    DWORD len = sizeof(val);
+
+    if (!GetTokenInformation(h, type, &val, len, &len))
+	pr_err(indent, str, GetLastError());
+    else
+	printf("%*s%s: %d\n", indent, "", str, val);
+}
+
+static void
 print_tokinfo(HANDLE inh)
 {
     HANDLE h;
-    DWORD err, val, len;
+    DWORD err;
 
     if (inh) {
 	h = inh;
-    }else {
+    } else {
 	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &h)) {
 	    print_err("OpenProcessToken", GetLastError());
 	    return;
 	}
     }
 
-    err = get_dword_tokinfo(h, TokenUIAccess, &val);
-    if (err)
-	print_err("Get Token UI access", err);
-    else
-	printf("Token UI Access: %d\n", val);
+    TOKEN_USER *user;
+    err = read_token_info(h, TokenUser, (void **) &user, NULL);
+    if (err) {
+	pr_err(0, "Get Token user", err);
+    } else {
+	pr_sid_attr(0, "Token user", &user->User);
+	free(user);
+    }
+    
+    TOKEN_GROUPS *groups;
+    err = read_token_info(h, TokenGroups, (void **) &groups, NULL);
+    if (err) {
+	pr_err(0, "Get Token groups", err);
+    } else {
+	pr_token_groups(0, "Token groups", groups);
+	free(groups);
+    }
 
-    err = get_dword_tokinfo(h, TokenSandBoxInert, &val);
-    if (err)
-	print_err("Get Token sandbox inert", GetLastError());
-    else
-	printf("Token sandbox inert: %d\n", val);
+    TOKEN_PRIVILEGES *privs;
+    err = read_token_info(h, TokenPrivileges, (void **) &privs, NULL);
+    if (err) {
+	pr_err(0, "Get Token privileges", err);
+    } else {
+	pr_token_priv(0, "Token privileges", privs);
+	free(privs);
+    }
 
-    err = get_dword_tokinfo(h, TokenIsAppContainer, &val);
-    if (err)
-	print_err("Get Token is App Container", GetLastError());
-    else
-	printf("Token is app container: %d\n", val);
+    TOKEN_OWNER *owner;
+    err = read_token_info(h, TokenOwner, (void **) &owner, NULL);
+    if (err) {
+	pr_err(0, "Get Token owner", err);
+    } else {
+	pr_sid(0, "Token owner", (SID *) owner->Owner);
+	free(owner);
+    }
+    
+    TOKEN_PRIMARY_GROUP *pgroup;
+    err = read_token_info(h, TokenPrimaryGroup, (void **) &pgroup, NULL);
+    if (err) {
+	pr_err(0,"Get Token primary group", err);
+    } else {
+	pr_sid(0, "Token primary group", (SID *) pgroup->PrimaryGroup);
+	free(pgroup);
+    }
+    
+    TOKEN_DEFAULT_DACL *ddacl;
+    err = read_token_info(h, TokenDefaultDacl, (void **) &ddacl, NULL);
+    if (err) {
+	pr_err(0, "Get Token default dacl", err);
+    } else {
+	pr_acl(0, "Token default dacl", ddacl->DefaultDacl);
+	free(ddacl);
+    }
+    
+    TOKEN_SOURCE *source;
+    err = read_token_info(h, TokenSource, (void **) &source, NULL);
+    if (err) {
+	pr_err(0, "Token source", err);
+    } else {
+	pr_token_source(0, "Token source", source);
+	free(source);
+    }
 
-    err = get_dword_tokinfo(h, TokenMandatoryPolicy, &val);
-    if (err)
-	print_err("Get Token mandatory policy", GetLastError());
-    else
-	printf("Token is mandatory policy: %d\n", val);
+    pr_int_tokinfo(0, h, TokenType, "Token type");
+    pr_int_tokinfo(0, h, TokenImpersonationLevel, "Impersonation level");
+    pr_token_statistics(0, h, "Token statistics");
 
-    err = get_dword_tokinfo(h, TokenSessionId, &val);
-    if (err)
-	print_err("Get Session Id", GetLastError());
-    else
-	printf("Token session id: %d\n", val);
+    err = read_token_info(h, TokenRestrictedSids, (void **) &groups, NULL);
+    if (err) {
+	pr_err(0, "Token restricted sids", err);
+    } else {
+	pr_token_groups(0, "Token restricted sids", groups);
+	free(groups);
+    }
 
-    pr_token_info(h);
+    pr_dword_tokinfo(0, false, h, TokenSessionId, "Session Id");
+
+    TOKEN_GROUPS_AND_PRIVILEGES *grpriv;
+    err = read_token_info(h, TokenGroupsAndPrivileges, (void **) &grpriv,
+			  NULL);
+    if (err) {
+	pr_err(0, "Token groups and privileges", err);
+    } else {
+	pr_token_groups_and_privileges(0, "Token groups and privileges",
+				       grpriv);
+	free(grpriv);
+    }
+
+    pr_dword_tokinfo(0, false, h, TokenSandBoxInert, "Token sandbox inert");
+
+    pr_dword_tokinfo(0, false, h, TokenUIAccess, "Token UI access");
+    pr_dword_tokinfo(0, false, h, TokenIsAppContainer,
+		     "Token is App Container");
+    pr_dword_tokinfo(0, false, h, TokenMandatoryPolicy,
+		     "Token mandatory policy");
+
+    pr_token_access_info(0, h);
 
     if (!inh)
 	CloseHandle(h);
@@ -328,6 +771,52 @@ SetPrivilege(HANDLE hToken,
 }
 
 DWORD
+set_privileges(HANDLE hToken)
+{
+    //
+    // Activate the required privileges
+    //
+    // see https://docs.microsoft.com/en-us/windows/win32/secauthz/privilege-constants
+    //
+    // SeTcbPrivilege User Right: Act as part of the operating system.
+    if (!SetPrivilege(hToken, SE_TCB_NAME, TRUE)) {
+	goto End;
+    }
+    // SeIncreaseQuotaPrivilege User Right: Adjust memory quotas for a process.
+    if (!SetPrivilege(hToken, SE_INCREASE_QUOTA_NAME, TRUE)) {
+	goto End;
+    }
+    // SeAssignPrimaryTokenPrivilege User Right: Replace a process-level token.
+    if (!SetPrivilege(hToken, SE_ASSIGNPRIMARYTOKEN_NAME, TRUE)) {
+	goto End;
+    }
+
+    // SeImpersonatePrivilege User Right
+    if (!SetPrivilege(hToken, SE_IMPERSONATE_NAME, TRUE)) {
+	goto End;
+    }
+
+#if 0
+    /*
+     * Can't get seCreateTokenPrivilege this way, have to impersonate
+     * lsass.exe.
+     */
+    if (!SetPrivilege(hToken, SE_CREATE_TOKEN_NAME, TRUE)) {
+	goto End;
+    }
+#endif
+    if (!SetPrivilege(hToken, SE_TAKE_OWNERSHIP_NAME, TRUE)) {
+	goto End;
+    }
+    if (!SetPrivilege(hToken, SE_SECURITY_NAME, TRUE)) {
+	goto End;
+    }
+    return 0;
+ End:
+    return GetLastError();
+}
+
+DWORD
 find_sessions(void)
 {
     DWORD err, sescount;
@@ -363,7 +852,6 @@ get_logon_sid(HANDLE h, SID **logon_sid)
     TOKEN_GROUPS *grps = NULL;
     SID *sid = NULL;
     unsigned int i;
-    bool retried = false;
     bool found = false;
     WTS_SESSION_INFOA *sesinfo = NULL;
     DWORD sescount, sescur = 0;;
@@ -458,7 +946,6 @@ static struct priv_data std_privs[] = {
 static struct priv_data *
 alloc_priv_array(struct priv_data *iprivs, unsigned int *len)
 {
-    DWORD err;
     unsigned int i;
     struct priv_data *privs;
 
@@ -503,6 +990,7 @@ update_privileges(HANDLE h, struct priv_data *privs, unsigned int privs_len)
 
     for (j = 0; j < privs_len; j++)
 	privs[j].found = false;
+
     for (i = 0; i < hpriv->PrivilegeCount; i++) {
 	nhpriv->Privileges[i] = hpriv->Privileges[i];
 	for (j = 0; j < privs_len; j++) {
@@ -516,6 +1004,7 @@ update_privileges(HANDLE h, struct priv_data *privs, unsigned int privs_len)
 	    /* Not found, remove it. */
 	    nhpriv->Privileges[i].Attributes = SE_PRIVILEGE_REMOVED;
     }
+
     for (j = 0; j < privs_len; j++) {
 	if (!privs[j].found)
 	    nhpriv->Privileges[nhpriv->PrivilegeCount++] = privs[j].priv;
@@ -537,7 +1026,7 @@ update_privileges(HANDLE h, struct priv_data *privs, unsigned int privs_len)
 DWORD
 medium_mandatory_policy(HANDLE h)
 {
-    DWORD err = 0, len = 0;
+    DWORD err = 0;
     TOKEN_MANDATORY_LABEL *integrity;
     SID *integrity_sid;
 
@@ -621,7 +1110,6 @@ deny_admin_groups(HANDLE h, HANDLE *rh)
     HANDLE resh = NULL;
     SID *admin_sid = NULL, *admin_member_sid = NULL;
     SID_AND_ATTRIBUTES disable_sids[2];
-    TOKEN_LINKED_TOKEN link;
     TOKEN_GROUPS *grps = NULL;
     unsigned int i;
 
@@ -764,18 +1252,24 @@ InitUnicodeString (PUNICODE_STRING DestinationString,
 
 // NB this handler runs in a dedicated thread.
 BOOL WINAPI ConsoleControlHandler(DWORD ctrlType) {
+#if 0
     LPCSTR ctrlTypeName;
-    #define HANDLE_CONSOLE_CONTROL_EVENT(e) case e: ctrlTypeName = #e; break;
+#endif
+
+#define HANDLE_CONSOLE_CONTROL_EVENT(e) case e: ctrlTypeName = #e; break;
     switch (ctrlType) {
+#if 0
         HANDLE_CONSOLE_CONTROL_EVENT(CTRL_C_EVENT)
         HANDLE_CONSOLE_CONTROL_EVENT(CTRL_BREAK_EVENT)
         HANDLE_CONSOLE_CONTROL_EVENT(CTRL_CLOSE_EVENT)
         HANDLE_CONSOLE_CONTROL_EVENT(CTRL_LOGOFF_EVENT)
         HANDLE_CONSOLE_CONTROL_EVENT(CTRL_SHUTDOWN_EVENT)
+#endif
         default:
             return FALSE;
     }
-    #undef HANDLE_CONSOLE_CONTROL_EVENT
+#undef HANDLE_CONSOLE_CONTROL_EVENT
+    
     switch (ctrlType) {
         case CTRL_CLOSE_EVENT:
         case CTRL_LOGOFF_EVENT:
@@ -786,6 +1280,7 @@ BOOL WINAPI ConsoleControlHandler(DWORD ctrlType) {
     }
 }
 
+#if 0
 DWORD
 find_lsass_tok(HANDLE *rtok)
 {
@@ -1009,6 +1504,7 @@ create_token_from_existing_token(HANDLE logon_tok, HANDLE *htok)
  End:
     return err;
 }
+#endif
 
 static void
 usage(void)
@@ -1034,6 +1530,7 @@ _tmain (int argc, TCHAR *argv[])
     HANDLE hLsa = NULL;
     HANDLE hToken = NULL;
     HANDLE logon_tok = NULL;
+    HANDLE tmph;
 
     OSVERSIONINFO osvi;
     BOOL bIsLocal = TRUE;
@@ -1073,7 +1570,7 @@ _tmain (int argc, TCHAR *argv[])
     TCHAR *next_token = NULL;
     LPCWSTR userProfileDirectory = TEXT("C:\\");
     PMSV1_0_INTERACTIVE_PROFILE pInteractiveProfile = NULL;
-    unsigned int i;
+    int arg;
     int err;
     size_t len;
     bool use_lsa = false;
@@ -1089,32 +1586,32 @@ _tmain (int argc, TCHAR *argv[])
     //
     SetConsoleCtrlHandler(ConsoleControlHandler, TRUE);
 
-    for (i = 1; i < argc; i++) {
-	if (argv[i][0] != TEXT('-'))
+    for (arg = 1; arg < argc; arg++) {
+	if (argv[arg][0] != TEXT('-'))
 	    break;
-	if (_tcscmp(argv[i], TEXT("--lsa")) == 0) {
+	if (_tcscmp(argv[arg], TEXT("--lsa")) == 0) {
 	    use_lsa = true;
-	} else if (_tcscmp(argv[i], TEXT("--")) == 0) {
+	} else if (_tcscmp(argv[arg], TEXT("--")) == 0) {
 	    break;
-	} else if (_tcscmp(argv[i], TEXT("--s4u")) == 0) {
+	} else if (_tcscmp(argv[arg], TEXT("--s4u")) == 0) {
 	    use_s4u = true;
-	} else if (_tcscmp(argv[i], TEXT("--priv")) == 0) {
+	} else if (_tcscmp(argv[arg], TEXT("--priv")) == 0) {
 	    do_privileged = true;
-	} else if (_tcscmp(argv[i], TEXT("--lsid")) == 0) {
+	} else if (_tcscmp(argv[arg], TEXT("--lsid")) == 0) {
 	    add_logon_sid = true;
-	} else if (_tcscmp(argv[i], TEXT("--puser")) == 0) {
+	} else if (_tcscmp(argv[arg], TEXT("--puser")) == 0) {
 	    print_usertok = true;
-	} else if (_tcscmp(argv[i], TEXT("--esids")) == 0) {
+	} else if (_tcscmp(argv[arg], TEXT("--esids")) == 0) {
 	    add_extra_sids = true;
-	} else if (_tcscmp(argv[i], TEXT("--pw")) == 0) {
-	    i++;
-	    if (i >= argc) {
+	} else if (_tcscmp(argv[arg], TEXT("--pw")) == 0) {
+	    arg++;
+	    if (arg >= argc) {
 		fprintf(stderr, "No password supplied with --pw");
 		goto End;
 	    }
-	    password = argv[i];
+	    password = argv[arg];
 	} else {
-	    fprintf(stderr, "Unknown option: %ls\n", argv[i]);
+	    fprintf(stderr, "Unknown option: %ls\n", argv[arg]);
 	    usage();
 	    goto End;
 	}
@@ -1126,7 +1623,7 @@ _tmain (int argc, TCHAR *argv[])
 	goto End;
     }
 
-    if (i >= argc) {
+    if (arg >= argc) {
 	fprintf(stderr, "No user argument given\n");
 	usage();
 	goto End;
@@ -1135,14 +1632,14 @@ _tmain (int argc, TCHAR *argv[])
     //
     // Get DOMAIN and USERNAME from command line.
     //
-    if (_tcschr(argv[i], TEXT('\\'))) {
-	szDomain = _tcstok_s(argv[i], seps, &next_token);
+    if (_tcschr(argv[arg], TEXT('\\'))) {
+	szDomain = _tcstok_s(argv[arg], seps, &next_token);
 	domain2 = szDomain;
 	szUsername = _tcstok_s(NULL, seps, &next_token);
     } else {
 	szDomain = TEXT("");
 	domain2 = NULL;
-	szUsername = argv[i];
+	szUsername = argv[arg];
 	bIsLocal = TRUE;
     }
 
@@ -1164,46 +1661,12 @@ _tmain (int argc, TCHAR *argv[])
 	goto End;
     }
 
-    //
-    // Activate the required privileges
-    //
-    // see https://docs.microsoft.com/en-us/windows/win32/secauthz/privilege-constants
-    //
-    OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
-    // SeTcbPrivilege User Right: Act as part of the operating system.
-    if (!SetPrivilege(hToken, SE_TCB_NAME, TRUE))
-	{
-	    goto End;
-	}
-    // SeIncreaseQuotaPrivilege User Right: Adjust memory quotas for a process.
-    if (!SetPrivilege(hToken, SE_INCREASE_QUOTA_NAME, TRUE))
-	{
-	    goto End;
-	}
-    // SeAssignPrimaryTokenPrivilege User Right: Replace a process-level token.
-    if (!SetPrivilege(hToken, SE_ASSIGNPRIMARYTOKEN_NAME, TRUE))
-	{
-	    goto End;
-	}
-
-#if 0
-    /*
-     * Can't get seCreateTokenPrivilege this way, have to impersonate
-     * lsass.exe.
-     */
-    if (!SetPrivilege(hToken, SE_CREATE_TOKEN_NAME, TRUE))
-	{
-	    goto End;
-	}
-#endif
-    if (!SetPrivilege(hToken, SE_TAKE_OWNERSHIP_NAME, TRUE))
-	{
-	    goto End;
-	}
-    if (!SetPrivilege(hToken, SE_SECURITY_NAME, TRUE))
-	{
-	    goto End;
-	}
+    OpenProcessToken(GetCurrentProcess(),
+		     TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+		     &hToken);
+    err = set_privileges(hToken);
+    if (err)
+	goto End;
 
     //
     // Get logon SID
@@ -1346,20 +1809,25 @@ _tmain (int argc, TCHAR *argv[])
 	InitLsaString(&OriginName, "S4U for Windows");
 	AllocateLocallyUniqueId(&TokenSource.SourceIdentifier);
 
-	//
-	// Add extra SID to token.
-	//
-	// If the application needs to connect to a Windows Desktop,
-	// Logon SID must be added to the Token.
-	//
-	len = sizeof(TOKEN_GROUPS) + ((1 + add_groups_len) *
-				      sizeof(SID_AND_ATTRIBUTES));
-	extra_groups = (TOKEN_GROUPS *) malloc(len);
-	if (!extra_groups) {
-	    fprintf(stderr, "Allocate extra groups failed.\n");
-	    goto End;
+	if (add_extra_sids || logon_sid) {
+	    //
+	    // Add extra SID to token.
+	    //
+	    // If the application needs to connect to a Windows Desktop,
+	    // Logon SID must be added to the Token.
+	    //
+	    // Don't do this if we are not adding any SIDS, just pass
+	    // in NULL.
+	    //
+	    len = sizeof(TOKEN_GROUPS) + ((1 + add_groups_len) *
+					  sizeof(SID_AND_ATTRIBUTES));
+	    extra_groups = (TOKEN_GROUPS *) malloc(len);
+	    if (!extra_groups) {
+		fprintf(stderr, "Allocate extra groups failed.\n");
+		goto End;
+	    }
+	    memset(extra_groups, 0, len);
 	}
-	memset(extra_groups, 0, len);
 
 	//
 	// Add Logon Sid, if present.
@@ -1373,6 +1841,8 @@ _tmain (int argc, TCHAR *argv[])
 	// Add other groups from a list.
 	//
 	if (add_extra_sids) {
+	    size_t i;
+
 	    for (i = 0; i < add_groups_len; i++) {
 		err = append_group(extra_groups, NULL, add_groups[i].name,
 				   (SE_GROUP_ENABLED |
@@ -1442,6 +1912,18 @@ _tmain (int argc, TCHAR *argv[])
 	    print_err("LogonUser", GetLastError());
 	    goto End;
 	}
+	logon_type = Interactive;
+    }
+
+    if (logon_type != Network) {
+	if (!DuplicateTokenEx(logon_tok, TOKEN_ALL_ACCESS,
+			      NULL, SecurityImpersonation,
+			      TokenImpersonation, &tmph)) {
+	    print_err("Duplicate Token", GetLastError());
+	    goto End;
+	}
+	CloseHandle(logon_tok);
+	logon_tok = tmph;
     }
 
     //
@@ -1466,7 +1948,7 @@ _tmain (int argc, TCHAR *argv[])
 	goto End;
     }
 
-    if (!do_privileged) {
+    if (!do_privileged && logon_type == Network) {
 	err = setup_process_token(&logon_tok, false);
 	if (err) {
 	    print_err("setup_process_token", err);
@@ -1483,7 +1965,7 @@ _tmain (int argc, TCHAR *argv[])
     //
     szCommandLine = (LPTSTR) malloc(MAX_PATH * sizeof(TCHAR));
     if (szCommandLine == NULL) {
-	fprintf(stderr, "HeapAlloc failed (error %u).\n", GetLastError());
+	fprintf(stderr, "HeapAlloc failed (error %ld).\n", GetLastError());
 	goto End;
     }
 
@@ -1506,16 +1988,25 @@ _tmain (int argc, TCHAR *argv[])
 	}
     }
 
-    HANDLE tmph;
-    if (!DuplicateTokenEx(logon_tok,
-			  TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
-			  NULL, SecurityAnonymous, TokenPrimary, &tmph)) {
+    
+    if (!SetThreadToken(NULL, logon_tok)) {
+	print_err("Set Thread token", GetLastError());
+	goto End;
+    }
+	
+    SECURITY_ATTRIBUTES secattr;
+    memset(&secattr, 0, sizeof(secattr));
+    secattr.nLength = sizeof(secattr);
+    secattr.bInheritHandle = TRUE;
+    if (!DuplicateTokenEx(logon_tok, 0,
+			  &secattr, SecurityImpersonation, TokenPrimary, &tmph)) {
 	print_err("Duplicate token", GetLastError());
 	goto End;
     }
     CloseHandle(logon_tok);
     logon_tok = tmph;
 
+#if 1
     //
     // CreateProcessAsUser requires these privileges to be available in
     // the current process:
@@ -1541,6 +2032,43 @@ _tmain (int argc, TCHAR *argv[])
 	print_err("CreateProcessAsUser", GetLastError());
 	goto End;
     }
+    RevertToSelf();
+#else
+    HANDLE lstok;
+    err = find_lsass_tok(&lstok);
+    if (err) {
+	print_err("find lsass token", err);
+	goto End;
+    }
+
+    err = set_privileges(lstok);
+    if (err)
+	goto End;
+
+    if (!SetThreadToken(NULL, lstok)) {
+	CloseHandle(lstok);
+	err = GetLastError();
+	print_err("Set lsass token", err);
+	goto End;
+    }
+    CloseHandle(lstok);
+
+    if (!CreateProcessWithTokenW(logon_tok,
+				 0,
+				 NULL,
+				 szCommandLine,
+				 (NORMAL_PRIORITY_CLASS |
+				  CREATE_UNICODE_ENVIRONMENT),
+				 lpUserEnvironment,
+				 userProfileDirectory,
+				 &si,
+				 &pi)) {
+	RevertToSelf();
+	print_err("CreateProcessAsUser", GetLastError());
+	goto End;
+    }
+    RevertToSelf();
+#endif
 
     exitCode = EXIT_SUCCESS;
 
