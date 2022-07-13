@@ -132,7 +132,7 @@ pr_token_priv(int indent, const char *str, TOKEN_PRIVILEGES *v)
     printf("%*sPrivilegeCount: %ld\n", indent + 2, "", v->PrivilegeCount);
     for (i = 0; i < v->PrivilegeCount; i++) {
 	snprintf(buf, sizeof(buf), "Privileges[%ld]", i);
-	pr_luid_and_attr(indent + 2, "", &v->Privileges[i]);
+	pr_luid_and_attr(indent + 2, buf, &v->Privileges[i]);
     }
 }
 
@@ -393,47 +393,6 @@ pr_token_groups(int indent, const char *str, TOKEN_GROUPS *v)
 }
 
 static void
-pr_token_groups_and_privileges(int indent, const char *str,
-			       TOKEN_GROUPS_AND_PRIVILEGES *v)
-{
-    DWORD i;
-    char buf[100];
-
-    printf("%*s%s:\n", indent, "", str);
-    printf("%*sSidCount: %ld\n", indent + 2, "", v->SidCount);
-    printf("%*sSidLength: %ld\n", indent + 2, "", v->SidLength);
-    for (i = 0; i < v->SidCount; i++) {
-	snprintf(buf, sizeof(buf), "Sids[%ld]", i);
-	pr_sid_attr(indent + 2, buf, &v->Sids[i]);
-    }
-    printf("%*sRestrictedSidCount: %ld\n", indent + 2, "",
-	   v->RestrictedSidCount);
-    printf("%*sRestrictedSidLength: %ld\n", indent + 2, "",
-	   v->RestrictedSidLength);
-    for (i = 0; i < v->RestrictedSidCount; i++) {
-	snprintf(buf, sizeof(buf), "RestrictedSids[%ld]", i);
-	pr_sid_attr(indent + 2, buf, &v->RestrictedSids[i]);
-    }
-    printf("%*sPrivilegeCount: %ld\n", indent + 2, "",
-	   v->PrivilegeCount);
-    printf("%*sPrivilegeLength: %ld\n", indent + 2, "",
-	   v->PrivilegeLength);
-    for (i = 0; i < v->PrivilegeCount; i++) {
-	snprintf(buf, sizeof(buf), "Privileges[%ld]", i);
-	pr_luid_and_attr(indent + 2, buf, &v->Privileges[i]);
-    }
-    pr_luid(indent + 2, "AuthenticationId", &v->AuthenticationId);
-}
-
-static void
-pr_token_source(int indent, const char *str, TOKEN_SOURCE *v)
-{
-    printf("%*s%s:\n", indent, "", str);
-    printf("%*sSourceName: %s\n", indent + 2, "", v->SourceName);
-    pr_luid(indent + 2, "SourceIdentifier", &v->SourceIdentifier);
-}
-
-static void
 pr_tok_mand_pol(int indent, const char *str, TOKEN_MANDATORY_POLICY *v)
 {
     printf("%*s%s.Policy: %ld\n", indent, "", str, v->Policy);
@@ -450,7 +409,7 @@ read_token_info(HANDLE h, TOKEN_INFORMATION_CLASS type, void **rval,
 	/* This should fail. */
 	return ERROR_INVALID_DATA;
     err = GetLastError();
-    if (err != ERROR_INSUFFICIENT_BUFFER)
+    if (err != ERROR_INSUFFICIENT_BUFFER && err != ERROR_BAD_LENGTH)
 	return err;
     val = malloc(len);
     if (!val)
@@ -463,33 +422,6 @@ read_token_info(HANDLE h, TOKEN_INFORMATION_CLASS type, void **rval,
     if (rlen)
 	*rlen = len;
     return 0;
-}
-
-static void
-pr_token_statistics(int indent, HANDLE h, const char *str)
-{
-    DWORD err;
-    TOKEN_STATISTICS *v;
-
-    printf("%*s%s:\n", indent, "", str);
-    err = read_token_info(h, TokenStatistics, (void **) &v, NULL);
-    if (err) {
-	pr_err(indent + 2, "**Fetch error", err);
-	return;
-    }
-
-    pr_luid(indent + 2, "Token Id", &v->TokenId);
-    pr_luid(indent + 2, "Authentication Id", &v->AuthenticationId);
-    printf("%*sExpiraton Time: %lld\n", indent + 2, "",
-	   v->ExpirationTime.QuadPart);
-    printf("%*sImpersonation level: %d\n", indent + 2, "",
-	   v->ImpersonationLevel);
-    printf("%*sDynamicCharged: %ld\n", indent + 2, "", v->DynamicCharged);
-    printf("%*sDynamicAvailable: %ld\n", indent + 2, "", v->DynamicAvailable);
-    printf("%*sGroupCount: %ld\n", indent + 2, "", v->GroupCount);
-    printf("%*sPrivilege count: %ld\n", indent + 2, "", v->PrivilegeCount);
-    pr_luid(indent + 2, "Modified Id", &v->ModifiedId);
-    free(v);
 }
 
 DWORD
@@ -513,56 +445,6 @@ print_security_info(HANDLE h)
     if (secdesc)
 	LocalFree(secdesc);
     return 0;
-}
-
-struct ta2 {
-    PSID_AND_ATTRIBUTES_HASH SidHash;
-    PSID_AND_ATTRIBUTES_HASH RestrictedSidHash;
-    PTOKEN_PRIVILEGES Privileges;
-    LUID AuthenticationId;
-    TOKEN_TYPE TokenType;
-    SECURITY_IMPERSONATION_LEVEL ImpersonationLevel;
-    TOKEN_MANDATORY_POLICY MandatoryPolicy;
-    DWORD Flags;
-    DWORD AppContainerNumber;
-    PSID PackageSid;
-    PSID_AND_ATTRIBUTES_HASH CapabilitiesHash;
-    PSID TrustLevelSid;
-};
-
-static void
-pr_token_access_info(int indent, HANDLE h)
-{
-    DWORD err;
-    struct ta2 *access_info;
-
-    printf("%*sAccess info:\n", indent, "");
-    err = read_token_info(h, TokenAccessInformation, (void **) &access_info,
-			  NULL);
-    if (err) {
-	pr_err(indent + 2, "Access info", err);
-    } else {
-	pr_sid_attr_hash(indent + 2, "SidHash", access_info->SidHash);
-	pr_sid_attr_hash(indent + 2, "RestrictedSidHash",
-			 access_info->RestrictedSidHash);
-	pr_token_priv(indent + 2, "Privileges", access_info->Privileges);
-	pr_luid(indent + 2, "AuthenticationId",
-		&access_info->AuthenticationId);
-	printf("%*sTokenType: %d\n", indent + 2, "", access_info->TokenType);
-	printf("%*sImpersonationLevel: %d\n", indent + 2, "",
-	       access_info->ImpersonationLevel);
-	pr_tok_mand_pol(indent + 2, "MandatoryPolicy",
-			&access_info->MandatoryPolicy);
-	printf("%*sFlags: %ld\n", indent + 2, "", access_info->Flags);
-	printf("%*sAppContainerNumber: %ld\n", indent + 2, "",
-	       access_info->AppContainerNumber);
-	pr_sid(indent + 2, "PackageSid", (SID *) access_info->PackageSid);
-	pr_sid_attr_hash(indent + 2, "CapabilitiesHash",
-			 access_info->CapabilitiesHash);
-	pr_sid(indent + 2, "TrustLevelSid",
-	       (SID *) access_info->TrustLevelSid);
-	free(access_info);
-    }
 }
 
 static DWORD
@@ -604,10 +486,396 @@ pr_int_tokinfo(int indent,
 }
 
 static void
+pr_tok_groups(int indent,
+	      HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_GROUPS *groups;
+
+    err = read_token_info(h, type, (void **) &groups, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_token_groups(indent, str, groups);
+	free(groups);
+    }
+}
+
+static void
+pr_tok_user(int indent,
+	    HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_USER *user;
+
+    err = read_token_info(h, type, (void **) &user, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_sid_attr(indent, str, &user->User);
+	free(user);
+    }
+}
+
+static void
+pr_tok_privs(int indent,
+	    HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_PRIVILEGES *privs;
+
+    err = read_token_info(h, type, (void **) &privs, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_token_priv(indent, str, privs);
+	free(privs);
+    }
+}
+
+static void
+pr_tok_owner(int indent,
+	     HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_OWNER *owner;
+
+    err = read_token_info(h, type, (void **) &owner, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_sid(indent, str, (SID *) owner->Owner);
+	free(owner);
+    }
+}
+
+static void
+pr_tok_prim_group(int indent,
+		  HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_PRIMARY_GROUP *pgroup;
+
+    err = read_token_info(h, type, (void **) &pgroup, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_sid(indent, str, (SID *) pgroup->PrimaryGroup);
+	free(pgroup);
+    }
+}
+
+static void
+pr_tok_def_dacl(int indent,
+		HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_DEFAULT_DACL *ddacl;
+
+    err = read_token_info(h, type, (void **) &ddacl, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_acl(indent, str, ddacl->DefaultDacl);
+	free(ddacl);
+    }
+}
+
+static void
+pr_tok_source(int indent,
+	      HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_SOURCE *source;
+
+    err = read_token_info(h, type, (void **) &source, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	printf("%*s%s:\n", indent, "", str);
+	printf("%*sSourceName: %s\n", indent + 2, "", source->SourceName);
+	pr_luid(indent + 2, "SourceIdentifier", &source->SourceIdentifier);
+	free(source);
+    }
+}
+
+static void
+pr_tok_stats(int indent,
+	     HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_STATISTICS *v;
+
+    err = read_token_info(h, type, (void **) &v, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+	return;
+    }
+
+    printf("%*s%s:\n", indent, "", str);
+    pr_luid(indent + 2, "Token Id", &v->TokenId);
+    pr_luid(indent + 2, "Authentication Id", &v->AuthenticationId);
+    printf("%*sExpiraton Time: %lld\n", indent + 2, "",
+	   v->ExpirationTime.QuadPart);
+    printf("%*sImpersonation level: %d\n", indent + 2, "",
+	   v->ImpersonationLevel);
+    printf("%*sDynamicCharged: %ld\n", indent + 2, "", v->DynamicCharged);
+    printf("%*sDynamicAvailable: %ld\n", indent + 2, "", v->DynamicAvailable);
+    printf("%*sGroupCount: %ld\n", indent + 2, "", v->GroupCount);
+    printf("%*sPrivilege count: %ld\n", indent + 2, "", v->PrivilegeCount);
+    pr_luid(indent + 2, "Modified Id", &v->ModifiedId);
+    free(v);
+}
+
+static void
+pr_tok_groups_privs(int indent,
+		    HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err, i;
+    TOKEN_GROUPS_AND_PRIVILEGES *v;
+    char buf[100];
+
+    err = read_token_info(h, type, (void **) &v, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+	return;
+    }
+
+    printf("%*s%s:\n", indent, "", str);
+    printf("%*sSidCount: %ld\n", indent + 2, "", v->SidCount);
+    printf("%*sSidLength: %ld\n", indent + 2, "", v->SidLength);
+    for (i = 0; i < v->SidCount; i++) {
+	snprintf(buf, sizeof(buf), "Sids[%ld]", i);
+	pr_sid_attr(indent + 2, buf, &v->Sids[i]);
+    }
+    printf("%*sRestrictedSidCount: %ld\n", indent + 2, "",
+	   v->RestrictedSidCount);
+    printf("%*sRestrictedSidLength: %ld\n", indent + 2, "",
+	   v->RestrictedSidLength);
+    for (i = 0; i < v->RestrictedSidCount; i++) {
+	snprintf(buf, sizeof(buf), "RestrictedSids[%ld]", i);
+	pr_sid_attr(indent + 2, buf, &v->RestrictedSids[i]);
+    }
+    printf("%*sPrivilegeCount: %ld\n", indent + 2, "",
+	   v->PrivilegeCount);
+    printf("%*sPrivilegeLength: %ld\n", indent + 2, "",
+	   v->PrivilegeLength);
+    for (i = 0; i < v->PrivilegeCount; i++) {
+	snprintf(buf, sizeof(buf), "Privileges[%ld]", i);
+	pr_luid_and_attr(indent + 2, buf, &v->Privileges[i]);
+    }
+    pr_luid(indent + 2, "AuthenticationId", &v->AuthenticationId);
+}
+ 
+static void
+pr_tok_origin(int indent,
+	      HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_ORIGIN *origin;
+
+    err = read_token_info(h, type, (void **) &origin, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_luid(indent, str, &origin->OriginatingLogonSession);
+	free(origin);
+    }
+}
+
+static void
+pr_tok_linked_tok(int indent,
+		  HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_LINKED_TOKEN *v;
+
+    err = read_token_info(h, type, (void **) &v, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	printf("%*s%s: %p\n", indent + 2, "", str, v->LinkedToken);
+	CloseHandle(v->LinkedToken);
+	free(v);
+    }
+}
+
+struct ta2 {
+    PSID_AND_ATTRIBUTES_HASH SidHash;
+    PSID_AND_ATTRIBUTES_HASH RestrictedSidHash;
+    PTOKEN_PRIVILEGES Privileges;
+    LUID AuthenticationId;
+    TOKEN_TYPE TokenType;
+    SECURITY_IMPERSONATION_LEVEL ImpersonationLevel;
+    TOKEN_MANDATORY_POLICY MandatoryPolicy;
+    DWORD Flags;
+    DWORD AppContainerNumber;
+    PSID PackageSid;
+    PSID_AND_ATTRIBUTES_HASH CapabilitiesHash;
+    PSID TrustLevelSid;
+};
+
+static void
+pr_tok_access_info(int indent,
+		   HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    struct ta2 *access_info;
+
+    err = read_token_info(h, type, (void **) &access_info, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+	return;
+    }
+
+    printf("%*s%s:\n", indent, "", str);
+    pr_sid_attr_hash(indent + 2, "SidHash", access_info->SidHash);
+    pr_sid_attr_hash(indent + 2, "RestrictedSidHash",
+		     access_info->RestrictedSidHash);
+    pr_token_priv(indent + 2, "Privileges", access_info->Privileges);
+    pr_luid(indent + 2, "AuthenticationId",
+	    &access_info->AuthenticationId);
+    printf("%*sTokenType: %d\n", indent + 2, "", access_info->TokenType);
+    printf("%*sImpersonationLevel: %d\n", indent + 2, "",
+	   access_info->ImpersonationLevel);
+    pr_tok_mand_pol(indent + 2, "MandatoryPolicy",
+		    &access_info->MandatoryPolicy);
+    printf("%*sFlags: %ld\n", indent + 2, "", access_info->Flags);
+    printf("%*sAppContainerNumber: %ld\n", indent + 2, "",
+	   access_info->AppContainerNumber);
+    pr_sid(indent + 2, "PackageSid", (SID *) access_info->PackageSid);
+    pr_sid_attr_hash(indent + 2, "CapabilitiesHash",
+		     access_info->CapabilitiesHash);
+    pr_sid(indent + 2, "TrustLevelSid",
+	   (SID *) access_info->TrustLevelSid);
+    free(access_info);
+}
+
+static void
+pr_tok_mand_label(int indent,
+		  HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_MANDATORY_LABEL *v;
+
+    err = read_token_info(h, type, (void **) &v, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_sid_attr(indent, str, &v->Label);
+	free(v);
+    }
+}
+
+static void
+pr_tok_appcon_info(int indent,
+		   HANDLE h, TOKEN_INFORMATION_CLASS type, const char *str)
+{
+    DWORD err;
+    TOKEN_APPCONTAINER_INFORMATION *v;
+
+    err = read_token_info(h, type, (void **) &v, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+    } else {
+	pr_sid(indent, str, (SID *) v->TokenAppContainer);
+	free(v);
+    }
+}
+
+static void
+pr_claim_sec_attr_v1(int indent, const char *str,
+		     CLAIM_SECURITY_ATTRIBUTE_V1 *v)
+{
+    DWORD i, j;
+    unsigned char *d;
+
+    printf("%*s%s:\n", indent, "", str);
+    indent += 2;
+    printf("%*sName: %ls", indent, "", v->Name);
+    printf("%*sValueType: %d", indent, "", v->ValueType);
+    printf("%*sReserved: %d", indent, "", v->Reserved);
+    printf("%*sFlags: %ld", indent, "", v->Flags);
+    printf("%*sValueCount: %ld", indent, "", v->ValueCount);
+    for (i = 0; i < v->ValueCount; i++) {
+	switch(v->ValueType) {
+	case CLAIM_SECURITY_ATTRIBUTE_TYPE_INT64:
+	    printf("%*sINT64[%ld]: %lld\n", indent, "", i,
+		   v->Values.pInt64[i]);
+	    break;
+
+	case CLAIM_SECURITY_ATTRIBUTE_TYPE_UINT64:
+	    printf("%*sUINT64[%ld]: %llu\n", indent, "", i,
+		   v->Values.pUint64[i]);
+	    break;
+
+	case CLAIM_SECURITY_ATTRIBUTE_TYPE_STRING:
+	    printf("%*sSTRING{%ld]: %ls\n", indent, "", i,
+		   v->Values.ppString[i]);
+	    break;
+
+	case CLAIM_SECURITY_ATTRIBUTE_TYPE_FQBN:
+	    printf("%*sFQBN[%ld]:\n", indent, "", i);
+	    printf("%*sVersion: %lld\n", indent + 2, "",
+		   v->Values.pFqbn[i].Version);
+	    printf("%*sName: %ls\n", indent + 2, "",
+		   v->Values.pFqbn[i].Name);
+	    break;
+	    
+	case CLAIM_SECURITY_ATTRIBUTE_TYPE_SID:
+	    printf("%*sSID[%ld]:\n", indent, "", i);
+	    goto pr_octets;
+	case CLAIM_SECURITY_ATTRIBUTE_TYPE_OCTET_STRING:
+	    printf("%*sOCTET_STING[%ld]:\n", indent, "", i);
+	pr_octets:
+	    d = (unsigned char *) v->Values.pOctetString[i].pValue;
+	    for (j = 0; j < v->Values.pOctetString[i].ValueLength; j++)
+		printf("%2.2x", d[j]);
+	    printf("\n");
+	    break;
+
+	case CLAIM_SECURITY_ATTRIBUTE_TYPE_BOOLEAN:
+	    printf("%*sBOOLEAN[%ld]: %lld\n", indent, "", i,
+		   v->Values.pUint64[i]);
+	    break;
+
+	default:
+	    printf("%*s: Unknown type\n", indent, "");
+	    break;
+	}
+    }
+}
+
+static void
+pr_tok_claim_sec_attr_info(int indent,
+			   HANDLE h, TOKEN_INFORMATION_CLASS type,
+			   const char *str)
+{
+    DWORD err, i;
+    CLAIM_SECURITY_ATTRIBUTES_INFORMATION *v;
+    char buf[100];
+
+    err = read_token_info(h, type, (void **) &v, NULL);
+    if (err) {
+	pr_err(indent, str, err);
+	return;
+    }
+
+    printf("%*s%s:\n", indent, "", str);
+    printf("%*sVersion: %d\n", indent + 2, "", v->Version);
+    printf("%*sReserved: %d\n", indent + 2, "", v->Reserved);
+    printf("%*sAttributeCount: %ld\n", indent + 2, "", v->AttributeCount);
+    for (i = 0; i < v->AttributeCount; i++) {
+	snprintf(buf, sizeof(buf), "Attribute[%ld]", i);
+	pr_claim_sec_attr_v1(indent + 2, buf, &v->Attribute.pAttributeV1[i]);
+    }
+    free(v);
+}
+
+static void
 print_tokinfo(HANDLE inh)
 {
     HANDLE h;
-    DWORD err;
 
     if (inh) {
 	h = inh;
@@ -618,103 +886,57 @@ print_tokinfo(HANDLE inh)
 	}
     }
 
-    TOKEN_USER *user;
-    err = read_token_info(h, TokenUser, (void **) &user, NULL);
-    if (err) {
-	pr_err(0, "Get Token user", err);
-    } else {
-	pr_sid_attr(0, "Token user", &user->User);
-	free(user);
-    }
-    
-    TOKEN_GROUPS *groups;
-    err = read_token_info(h, TokenGroups, (void **) &groups, NULL);
-    if (err) {
-	pr_err(0, "Get Token groups", err);
-    } else {
-	pr_token_groups(0, "Token groups", groups);
-	free(groups);
-    }
-
-    TOKEN_PRIVILEGES *privs;
-    err = read_token_info(h, TokenPrivileges, (void **) &privs, NULL);
-    if (err) {
-	pr_err(0, "Get Token privileges", err);
-    } else {
-	pr_token_priv(0, "Token privileges", privs);
-	free(privs);
-    }
-
-    TOKEN_OWNER *owner;
-    err = read_token_info(h, TokenOwner, (void **) &owner, NULL);
-    if (err) {
-	pr_err(0, "Get Token owner", err);
-    } else {
-	pr_sid(0, "Token owner", (SID *) owner->Owner);
-	free(owner);
-    }
-    
-    TOKEN_PRIMARY_GROUP *pgroup;
-    err = read_token_info(h, TokenPrimaryGroup, (void **) &pgroup, NULL);
-    if (err) {
-	pr_err(0,"Get Token primary group", err);
-    } else {
-	pr_sid(0, "Token primary group", (SID *) pgroup->PrimaryGroup);
-	free(pgroup);
-    }
-    
-    TOKEN_DEFAULT_DACL *ddacl;
-    err = read_token_info(h, TokenDefaultDacl, (void **) &ddacl, NULL);
-    if (err) {
-	pr_err(0, "Get Token default dacl", err);
-    } else {
-	pr_acl(0, "Token default dacl", ddacl->DefaultDacl);
-	free(ddacl);
-    }
-    
-    TOKEN_SOURCE *source;
-    err = read_token_info(h, TokenSource, (void **) &source, NULL);
-    if (err) {
-	pr_err(0, "Token source", err);
-    } else {
-	pr_token_source(0, "Token source", source);
-	free(source);
-    }
+    pr_tok_user(0, h, TokenUser, "TokenUser");
+    pr_tok_groups(0, h, TokenGroups, "TokenGroups");
+    pr_tok_privs(0, h, TokenPrivileges, "TokenPrivileges");
+    pr_tok_owner(0, h, TokenOwner, "TokenOwner");
+    pr_tok_prim_group(0, h, TokenPrimaryGroup, "TokenPrimaryGroup");
+    pr_tok_def_dacl(0, h, TokenDefaultDacl, "TokenDefaultDacl");
+    pr_tok_source(0, h, TokenSource, "TokenSource");
 
     pr_int_tokinfo(0, h, TokenType, "Token type");
     pr_int_tokinfo(0, h, TokenImpersonationLevel, "Impersonation level");
-    pr_token_statistics(0, h, "Token statistics");
+    pr_tok_stats(0, h, TokenStatistics, "TokenStatistics");
 
-    err = read_token_info(h, TokenRestrictedSids, (void **) &groups, NULL);
-    if (err) {
-	pr_err(0, "Token restricted sids", err);
-    } else {
-	pr_token_groups(0, "Token restricted sids", groups);
-	free(groups);
-    }
+    pr_tok_groups(0, h, TokenRestrictedSids, "TokenRestrictedSids");
 
     pr_dword_tokinfo(0, false, h, TokenSessionId, "Session Id");
 
-    TOKEN_GROUPS_AND_PRIVILEGES *grpriv;
-    err = read_token_info(h, TokenGroupsAndPrivileges, (void **) &grpriv,
-			  NULL);
-    if (err) {
-	pr_err(0, "Token groups and privileges", err);
-    } else {
-	pr_token_groups_and_privileges(0, "Token groups and privileges",
-				       grpriv);
-	free(grpriv);
-    }
+    pr_tok_groups_privs(0, h, TokenGroupsAndPrivileges,
+			"TokenGroupsAndPrivileges");
+    pr_dword_tokinfo(0, false, h, TokenSandBoxInert, "TokenSandboxInert");
+    pr_tok_origin(0, h, TokenOrigin, "TokenOrigin");
 
-    pr_dword_tokinfo(0, false, h, TokenSandBoxInert, "Token sandbox inert");
+    pr_int_tokinfo(0, h, TokenElevationType, "TokenElevationType");
+    pr_tok_linked_tok(0, h, TokenLinkedToken, "TokenLinkedToken");
+    pr_dword_tokinfo(0, false, h, TokenElevation, "TokenElevation");
+    pr_dword_tokinfo(0, false, h, TokenHasRestrictions,
+		     "TokenHasRestrictions");
 
-    pr_dword_tokinfo(0, false, h, TokenUIAccess, "Token UI access");
-    pr_dword_tokinfo(0, false, h, TokenIsAppContainer,
-		     "Token is App Container");
+    pr_tok_access_info(0, h, TokenAccessInformation, "TokenAccessInformation");
+
+    pr_dword_tokinfo(0, false, h, TokenVirtualizationAllowed,
+		     "TokenVirtualizationAllowed");
+    pr_dword_tokinfo(0, false, h, TokenVirtualizationEnabled,
+		     "TokenVirtualizationEnabled");
+    pr_tok_mand_label(0, h, TokenIntegrityLevel, "TokenIntegrityLevel");
+    pr_dword_tokinfo(0, false, h, TokenUIAccess, "TokenUIAccess");
     pr_dword_tokinfo(0, false, h, TokenMandatoryPolicy,
 		     "Token mandatory policy");
-
-    pr_token_access_info(0, h);
+    pr_tok_groups(0, h, TokenLogonSid, "TokenLogonSid");
+    pr_dword_tokinfo(0, false, h, TokenIsAppContainer,
+		     "Token is App Container");
+    pr_tok_groups(0, h, TokenCapabilities, "TokenCapabilities");
+    pr_tok_appcon_info(0, h, TokenAppContainerSid, "TokenAppContainerSid");
+    pr_dword_tokinfo(0, false, h, TokenAppContainerNumber,
+		     "TokenAppContainerNumber");
+    pr_tok_claim_sec_attr_info(0, h, TokenUserClaimAttributes,
+		     "TokenUserClaimAttributes");
+    pr_tok_claim_sec_attr_info(0, h, TokenDeviceClaimAttributes,
+		     "TokenDeviceClaimAttributes");
+    pr_tok_groups(0, h, TokenDeviceGroups, "TokenDeviceGroups");
+    pr_tok_groups(0, h, TokenRestrictedDeviceGroups,
+		  "TokenRestrictedDeviceGroups");
 
     if (!inh)
 	CloseHandle(h);
@@ -923,443 +1145,13 @@ get_logon_sid(HANDLE h, SID **logon_sid)
    return err;
 }
 
-struct priv_data {
-    LPCTSTR name;
-    bool found;
-    LUID_AND_ATTRIBUTES priv;
-};
-
+#if 0
 /*
- * These are the only privileges, and their attributes, that we keep
- * in a non-privileged login.
+ * The following is example code on how to use the lsass.exe program
+ * to get SE_CREATE_TOKEN_NAME access and how to use NtCreateToken to
+ * create a new token.  NtCreateToken requires SE_CREATE_TOKEN_NAME
+ * privilege.
  */
-static struct priv_data std_privs[] = {
-    { .name = SE_SHUTDOWN_NAME, .priv = { .Attributes = 0 } },
-    { .name = SE_CHANGE_NOTIFY_NAME,
-      .priv = { .Attributes = SE_PRIVILEGE_ENABLED } },
-    { .name = SE_UNDOCK_NAME, .priv = { .Attributes = 0 } },
-    { .name = SE_INC_WORKING_SET_NAME, .priv = { .Attributes = 0 } },
-    { .name = SE_TIME_ZONE_NAME, .priv = { .Attributes = 0 } },
-    {}
-};
-
-static struct priv_data *
-alloc_priv_array(struct priv_data *iprivs, unsigned int *len)
-{
-    unsigned int i;
-    struct priv_data *privs;
-
-    for (i = 0; iprivs[i].name; i++)
-	;
-    privs = (struct priv_data *) malloc(i * sizeof(struct priv_data));
-    if (!privs)
-	return NULL;
-    for (i = 0; iprivs[i].name; i++) {
-	privs[i] = iprivs[i];
-	if (!LookupPrivilegeValue(NULL, privs[i].name, &privs[i].priv.Luid)) {
-	    free(privs);
-	    return NULL;
-	}
-    }
-    *len = i;
-    return privs;
-}
-
-static bool
-luid_equal(LUID a, LUID b)
-{
-    return a.LowPart == b.LowPart && a.HighPart == b.HighPart;
-}
-
-static DWORD
-update_privileges(HANDLE h, struct priv_data *privs, unsigned int privs_len)
-{
-    DWORD err;
-    TOKEN_PRIVILEGES *hpriv = NULL, *nhpriv = NULL;
-    unsigned int i, j;
-
-    err = read_token_info(h, TokenPrivileges, (void **) &hpriv, NULL);
-    if (err)
-	return err;
-
-    nhpriv = (TOKEN_PRIVILEGES *)
-	malloc(sizeof(TOKEN_PRIVILEGES) +
-	       sizeof(LUID_AND_ATTRIBUTES) * (hpriv->PrivilegeCount +
-					      privs_len));
-    nhpriv->PrivilegeCount = hpriv->PrivilegeCount;
-
-    for (j = 0; j < privs_len; j++)
-	privs[j].found = false;
-
-    for (i = 0; i < hpriv->PrivilegeCount; i++) {
-	nhpriv->Privileges[i] = hpriv->Privileges[i];
-	for (j = 0; j < privs_len; j++) {
-	    if (luid_equal(nhpriv->Privileges[i].Luid, privs[j].priv.Luid)) {
-		nhpriv->Privileges[i].Attributes = privs[j].priv.Attributes;
-		privs[j].found = true;
-		break;
-	    }
-	}
-	if (j == privs_len)
-	    /* Not found, remove it. */
-	    nhpriv->Privileges[i].Attributes = SE_PRIVILEGE_REMOVED;
-    }
-
-    for (j = 0; j < privs_len; j++) {
-	if (!privs[j].found)
-	    nhpriv->Privileges[nhpriv->PrivilegeCount++] = privs[j].priv;
-    }
-
-    if (!AdjustTokenPrivileges(h, FALSE, nhpriv, 0, NULL, NULL)) {
-	err = GetLastError();
-	goto out_err;
-    }
-    err = 0;
- out_err:
-    if (hpriv)
-	free(hpriv);
-    if (nhpriv)
-	free(nhpriv);
-    return err;
-}
-
-DWORD
-medium_mandatory_policy(HANDLE h)
-{
-    DWORD err = 0;
-    TOKEN_MANDATORY_LABEL *integrity;
-    SID *integrity_sid;
-
-    err = read_token_info(h, TokenIntegrityLevel, (void **) &integrity, NULL);
-    if (err)
-	return err;
-
-    integrity_sid = (SID *) integrity->Label.Sid;
-    //printf("RID was: 0x%x\n", integrity_sid->SubAuthority[0]);
-    if (integrity_sid->SubAuthority[0] <= SECURITY_MANDATORY_MEDIUM_RID) {
-	free(integrity);
-	return 0;
-    }
-    integrity_sid->SubAuthority[0] = SECURITY_MANDATORY_MEDIUM_RID;
-
-    if (!SetTokenInformation(h, TokenIntegrityLevel,
-			     integrity, sizeof(integrity)))
-	err = GetLastError();
-    free(integrity);
-    return 0;
-}
-
-struct group_list {
-    const LPTSTR name;
-};
-static struct group_list add_groups[] = {
-    { .name = TEXT("S-1-5-32-559") }, /* BUILTIN\Performance Log Users */
-    { .name = TEXT("S-1-5-14") }, /* NT AUTHORITY\REMOTE INTERACTIVE LOGON */
-    { .name = TEXT("S-1-5-4") }, /* NT AUTHORITY\INTERACTIVE */
-    { .name = TEXT("S-1-2-0") }, /* LOCAL */
-    { .name = TEXT("S-1-5-64-36") }, /* NT AUTHORITY\Cloud Account Authentication */
-    { .name = TEXT("S-1-5-64-10") }, /* NT AUTHORITY\NTLM Authentication */
-};
-static unsigned int add_groups_len = (sizeof(add_groups) /
-				      sizeof(struct group_list));
-
-/* Supply either isid or sidstr, not both. */
-static DWORD
-append_group(TOKEN_GROUPS *grps, SID *isid, const LPTSTR sidstr, DWORD attrs)
-{
-    SID *sid = isid;
-    unsigned int i = grps->GroupCount;
-
-    if (sidstr) {
-	if (!ConvertStringSidToSid(sidstr, (void **) &sid))
-	    return GetLastError();
-    }
-    grps->Groups[i].Attributes = attrs;
-    grps->Groups[i].Sid = sid;
-    grps->GroupCount++;
-    return 0;
-}
-
-DWORD
-get_sid_from_type(WELL_KNOWN_SID_TYPE type, SID **rsid)
-{
-    DWORD err, len = 0;
-    SID *sid;
-
-    if (CreateWellKnownSid(type, NULL, NULL, &len))
-	/* This should fail. */
-	return ERROR_INVALID_DATA;
-    err = GetLastError();
-    if (err != ERROR_INSUFFICIENT_BUFFER)
-	return err;
-    sid = (SID *) malloc(len);
-    if (!CreateWellKnownSid(type, NULL, sid, &len)) {
-	err = GetLastError();
-	free(sid);
-	return err;
-    }
-    *rsid = sid;
-    return 0;
-}
-
-/* FIXME - only do this for admin accounts. */
-static DWORD
-deny_admin_groups(HANDLE h, HANDLE *rh)
-{
-    DWORD err;
-    HANDLE resh = NULL;
-    SID *admin_sid = NULL, *admin_member_sid = NULL;
-    SID_AND_ATTRIBUTES disable_sids[2];
-    TOKEN_GROUPS *grps = NULL;
-    unsigned int i;
-
-    /* NT AUTHORITY\Local account and member of Administrators group */
-    err = get_sid_from_type(WinNTLMAuthenticationSid, &admin_member_sid);
-    if (err)
-	return err;
-
-    /* BUILTIN\Administrators */
-    err = get_sid_from_type(WinBuiltinAdministratorsSid, &admin_sid);
-    if (err)
-	goto out_err;
-
-    /* Check if we have admin access. */
-    err = read_token_info(h, TokenGroups, (void **) &grps, NULL);
-    if (err)
-	goto out_err;
-    for (i = 0; i < grps->GroupCount; i++) {
-	if (EqualSid(admin_sid, grps->Groups[i].Sid))
-	    goto is_admin;
-	if (EqualSid(admin_member_sid, grps->Groups[i].Sid))
-	    goto is_admin;
-    }
-
-    goto out_err;
-
- is_admin:
-
-    disable_sids[0].Sid = admin_member_sid;
-    disable_sids[1].Sid = admin_sid;
-
-    if (!CreateRestrictedToken(h, 0, 2, disable_sids,
-			       0, NULL, 0, NULL, &resh)) {
-	err = GetLastError();
-	goto out_err;
-    }
-#if 0 /* FIXME - why doesn't this work? */
-    /*
-     * Link the privileged token to the restricted one so the privileged
-     * one can be used for escalation.
-     */
-    link.LinkedToken = h;
-    if (!SetTokenInformation(resh, TokenLinkedToken, &link, sizeof(link))) {
-	err = GetLastError();
-	goto out_err;
-    }
-#endif
-    err = 0;
-    *rh = resh;
-    resh = NULL;
- out_err:
-    if (grps)
-	free(grps);
-    if (admin_sid)
-	free(admin_sid);
-    if (admin_member_sid)
-	free(admin_member_sid);
-    if (resh)
-	CloseHandle(resh);
-    return err;
-}
-
-DWORD
-setup_process_token(HANDLE *inh, bool priv)
-{
-    DWORD err = 0;
-    HANDLE newh = NULL, h = *inh;
-    struct priv_data *privs = NULL;
-    unsigned int privs_len;
-
-    if (!priv) {
-	err = deny_admin_groups(h, &newh);
-	if (err)
-	    goto out_err;
-	if (newh) {
-	    h = newh;
-	    newh = *inh;
-	}
-
-	err = medium_mandatory_policy(h);
-	if (err)
-	    goto out_err;
-
-	privs = alloc_priv_array(std_privs, &privs_len);
-	if (!privs) {
-	    err = STATUS_NO_MEMORY;
-	    goto out_err;
-	}
-	err = update_privileges(h, privs, privs_len);
-	if (err)
-	    goto out_err;
-
-	*inh = h;
-    }
-
- out_err:
-    if (privs)
-	free(privs);
-    if (newh)
-	CloseHandle(newh);
-    return err;
-}
-
-VOID
-InitLsaString(PLSA_STRING DestinationString,
-	      const char *szSourceString)
-{
-   USHORT StringSize;
-
-   StringSize = (USHORT)strlen(szSourceString);
-
-   DestinationString->Length = StringSize;
-   DestinationString->MaximumLength = StringSize + sizeof(CHAR);
-   DestinationString->Buffer = (PCHAR) malloc(DestinationString->MaximumLength);
-
-   if (DestinationString->Buffer) {
-      memcpy(DestinationString->Buffer, szSourceString,
-	     DestinationString->Length);
-   } else {
-      memset(DestinationString, 0, sizeof(LSA_STRING));
-   }
-}
-
-PBYTE
-InitUnicodeString (PUNICODE_STRING DestinationString,
-		   LPWSTR szSourceString,
-		   PBYTE pbDestinationBuffer)
-{
-   USHORT StringSize;
-
-   StringSize = (USHORT)wcslen(szSourceString) * sizeof(WCHAR);
-   memcpy(pbDestinationBuffer, szSourceString, StringSize);
-
-   DestinationString->Length = StringSize;
-   DestinationString->MaximumLength = StringSize + sizeof(WCHAR);
-   DestinationString->Buffer = (PWSTR)pbDestinationBuffer;
-
-   return (PBYTE)pbDestinationBuffer + StringSize + sizeof(WCHAR);
-}
-
-// NB this handler runs in a dedicated thread.
-BOOL WINAPI ConsoleControlHandler(DWORD ctrlType) {
-#if 0
-    LPCSTR ctrlTypeName;
-#endif
-
-#define HANDLE_CONSOLE_CONTROL_EVENT(e) case e: ctrlTypeName = #e; break;
-    switch (ctrlType) {
-#if 0
-        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_C_EVENT)
-        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_BREAK_EVENT)
-        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_CLOSE_EVENT)
-        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_LOGOFF_EVENT)
-        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_SHUTDOWN_EVENT)
-#endif
-        default:
-            return FALSE;
-    }
-#undef HANDLE_CONSOLE_CONTROL_EVENT
-    
-    switch (ctrlType) {
-        case CTRL_CLOSE_EVENT:
-        case CTRL_LOGOFF_EVENT:
-        case CTRL_SHUTDOWN_EVENT:
-            return FALSE;
-         default:
-            return TRUE;
-    }
-}
-
-#if 0
-DWORD
-find_lsass_tok(HANDLE *rtok)
-{
-    DWORD *processes, len = 1000, newlen, count, err = 0, i;
-    LUID luid;
-    bool found = false;
-    HANDLE tokh = NULL;
-
-    if (!LookupPrivilegeValue(NULL, SE_CREATE_TOKEN_NAME, &luid))
-	return GetLastError();
-
- restart:
-    processes = (DWORD *) malloc(len);
-    if (!processes)
-	return STATUS_NO_MEMORY;
-    if (!EnumProcesses(processes, len, &newlen))
-	return GetLastError();
-    if (len == newlen) {
-	/* May not have gotten all the processes, try again. */
-	free(processes);
-	len += 1000;
-	goto restart;
-    }
-
-    count = len / sizeof(DWORD);
-    for (i = 0; !found && i < count; i++) {
-	HANDLE proch = OpenProcess(PROCESS_QUERY_INFORMATION |
-				   PROCESS_VM_READ,
-				   FALSE, processes[i]);
-        HMODULE modh;
-	TOKEN_PRIVILEGES *hpriv = NULL;
-	char procname[MAX_PATH];
-	unsigned int j;
-
-	if (!proch)
-	    continue;
-
-        if (!EnumProcessModules(proch, &modh, sizeof(modh), &len))
-	    goto nextproc;
-
-	if (!GetModuleBaseNameA(proch, modh, procname, sizeof(procname)))
-	    goto nextproc;
-
-	if (strcmp(procname, "lsass.exe") != 0)
-	    goto nextproc;
-
-	if (!OpenProcessToken(proch, TOKEN_ALL_ACCESS, &tokh))
-	    goto nextproc;
-
-	err = read_token_info(tokh, TokenPrivileges, (void **) &hpriv, NULL);
-	if (err)
-	    goto nextproc;
-
-	for (j = 0; j < hpriv->PrivilegeCount; j++) {
-	    if (luid_equal(hpriv->Privileges[j].Luid, luid))
-		found = true;
-	}
-
-    nextproc:
-	CloseHandle(proch);
-	if (!found && tokh) {
-	    CloseHandle(tokh);
-	    tokh = NULL;
-	}
-	if (hpriv)
-	    free(hpriv);
-    }
-
-    err = 0;
-    if (tokh) {
-	if (!DuplicateToken(tokh, SecurityImpersonation, rtok))
-	    err = GetLastError();
-	CloseHandle(tokh);
-	return err;
-    }
-
-    return ERROR_PROC_NOT_FOUND;
-}
-
 typedef NTSTATUS (*NtCreateToken)(
        PHANDLE TokenHandle,
        ACCESS_MASK DesiredAccess,
@@ -1487,7 +1279,7 @@ create_token_from_existing_token(HANDLE logon_tok, HANDLE *htok)
     Status = CreateToken(htok,
 			 TOKEN_ALL_ACCESS,
 			 &oa,
-			 TokenPrimary,
+			 TokenImpersonation,
 			 &session_id,
 			 &tstats.ExpirationTime,
 			 user, groups, privileges, &owner,
@@ -1505,6 +1297,648 @@ create_token_from_existing_token(HANDLE logon_tok, HANDLE *htok)
     return err;
 }
 #endif
+
+struct priv_data {
+    LPCTSTR name;
+    bool found;
+    LUID_AND_ATTRIBUTES priv;
+};
+
+/*
+ * These are the only privileges, and their attributes, that we keep
+ * in a non-privileged login.
+ */
+static struct priv_data std_privs[] = {
+    { .name = SE_SHUTDOWN_NAME, .priv = { .Attributes = 0 } },
+    { .name = SE_CHANGE_NOTIFY_NAME,
+      .priv = { .Attributes = SE_PRIVILEGE_ENABLED } },
+    { .name = SE_UNDOCK_NAME, .priv = { .Attributes = 0 } },
+    { .name = SE_INC_WORKING_SET_NAME, .priv = { .Attributes = 0 } },
+    { .name = SE_TIME_ZONE_NAME, .priv = { .Attributes = 0 } },
+    {}
+};
+
+static struct priv_data *
+alloc_priv_array(struct priv_data *iprivs, unsigned int *len)
+{
+    unsigned int i;
+    struct priv_data *privs;
+
+    for (i = 0; iprivs[i].name; i++)
+	;
+    privs = (struct priv_data *) malloc(i * sizeof(struct priv_data));
+    if (!privs)
+	return NULL;
+    for (i = 0; iprivs[i].name; i++) {
+	privs[i] = iprivs[i];
+	if (!LookupPrivilegeValue(NULL, privs[i].name, &privs[i].priv.Luid)) {
+	    free(privs);
+	    return NULL;
+	}
+    }
+    *len = i;
+    return privs;
+}
+
+static bool
+luid_equal(LUID a, LUID b)
+{
+    return a.LowPart == b.LowPart && a.HighPart == b.HighPart;
+}
+
+static DWORD
+update_privileges(HANDLE h, struct priv_data *privs, unsigned int privs_len)
+{
+    DWORD err;
+    TOKEN_PRIVILEGES *hpriv = NULL, *nhpriv = NULL;
+    unsigned int i, j;
+
+    err = read_token_info(h, TokenPrivileges, (void **) &hpriv, NULL);
+    if (err)
+	return err;
+
+    nhpriv = (TOKEN_PRIVILEGES *)
+	malloc(sizeof(TOKEN_PRIVILEGES) +
+	       sizeof(LUID_AND_ATTRIBUTES) * (hpriv->PrivilegeCount +
+					      privs_len));
+    nhpriv->PrivilegeCount = hpriv->PrivilegeCount;
+
+    for (j = 0; j < privs_len; j++)
+	privs[j].found = false;
+
+    for (i = 0; i < hpriv->PrivilegeCount; i++) {
+	nhpriv->Privileges[i] = hpriv->Privileges[i];
+	for (j = 0; j < privs_len; j++) {
+	    if (luid_equal(nhpriv->Privileges[i].Luid, privs[j].priv.Luid)) {
+		nhpriv->Privileges[i].Attributes = privs[j].priv.Attributes;
+		privs[j].found = true;
+		break;
+	    }
+	}
+	if (j == privs_len)
+	    /* Not found, remove it. */
+	    nhpriv->Privileges[i].Attributes = SE_PRIVILEGE_REMOVED;
+    }
+
+    for (j = 0; j < privs_len; j++) {
+	if (!privs[j].found)
+	    nhpriv->Privileges[nhpriv->PrivilegeCount++] = privs[j].priv;
+    }
+
+    if (!AdjustTokenPrivileges(h, FALSE, nhpriv, 0, NULL, NULL)) {
+	err = GetLastError();
+	goto out_err;
+    }
+    err = 0;
+ out_err:
+    if (hpriv)
+	free(hpriv);
+    if (nhpriv)
+	free(nhpriv);
+    return err;
+}
+
+DWORD
+medium_mandatory_policy(HANDLE h)
+{
+    DWORD err = 0;
+    TOKEN_MANDATORY_LABEL *integrity;
+    SID *integrity_sid;
+
+    err = read_token_info(h, TokenIntegrityLevel, (void **) &integrity, NULL);
+    if (err)
+	return err;
+
+    integrity_sid = (SID *) integrity->Label.Sid;
+    //printf("RID was: 0x%x\n", integrity_sid->SubAuthority[0]);
+    if (integrity_sid->SubAuthority[0] <= SECURITY_MANDATORY_MEDIUM_RID) {
+	free(integrity);
+	return 0;
+    }
+    integrity_sid->SubAuthority[0] = SECURITY_MANDATORY_MEDIUM_RID;
+
+    if (!SetTokenInformation(h, TokenIntegrityLevel,
+			     integrity, sizeof(*integrity)))
+	err = GetLastError();
+    free(integrity);
+    return err;
+}
+
+struct group_list {
+    const LPTSTR name;
+};
+static struct group_list add_groups[] = {
+    { .name = TEXT("S-1-5-32-559") }, /* BUILTIN\Performance Log Users */
+    { .name = TEXT("S-1-5-14") }, /* NT AUTHORITY\REMOTE INTERACTIVE LOGON */
+    { .name = TEXT("S-1-5-4") }, /* NT AUTHORITY\INTERACTIVE */
+    { .name = TEXT("S-1-2-0") }, /* LOCAL */
+    { .name = TEXT("S-1-5-64-36") }, /* NT AUTHORITY\Cloud Account Authentication */
+    { .name = TEXT("S-1-5-64-10") }, /* NT AUTHORITY\NTLM Authentication */
+};
+static unsigned int add_groups_len = (sizeof(add_groups) /
+				      sizeof(struct group_list));
+
+/* Supply either sid or sidstr, not both. */
+static DWORD
+append_group(TOKEN_GROUPS *grps, SID *sid, const LPTSTR sidstr, DWORD attrs)
+{
+    SID *new_sid, *free_sid = NULL;
+    size_t len;
+    unsigned int i = grps->GroupCount;
+    int err = 0;
+
+    if (sidstr) {
+	if (!ConvertStringSidToSid(sidstr, (void **) &free_sid))
+	    return GetLastError();
+	/* Can't use free_sid directly, it's allocated with LocalAlloc(). */
+	sid = free_sid;
+    }
+
+    len = GetLengthSid(sid);
+    new_sid = (SID *) malloc(len);
+    if (!new_sid) {
+	err = STATUS_NO_MEMORY;
+	goto out_err;
+    }
+    if (!CopySid(len, new_sid, sid)) {
+	err = GetLastError();
+	free(new_sid);
+	goto out_err;
+    }
+
+    grps->Groups[i].Attributes = attrs;
+    grps->Groups[i].Sid = new_sid;
+    grps->GroupCount++;
+ out_err:
+    if (free_sid)
+	LocalFree(free_sid);
+    return err;
+}
+
+DWORD
+get_sid_from_type(WELL_KNOWN_SID_TYPE type, SID **rsid)
+{
+    DWORD err, len = 0;
+    SID *sid;
+
+    if (CreateWellKnownSid(type, NULL, NULL, &len))
+	/* This should fail. */
+	return ERROR_INVALID_DATA;
+    err = GetLastError();
+    if (err != ERROR_INSUFFICIENT_BUFFER)
+	return err;
+    sid = (SID *) malloc(len);
+    if (!CreateWellKnownSid(type, NULL, sid, &len)) {
+	err = GetLastError();
+	free(sid);
+	return err;
+    }
+    *rsid = sid;
+    return 0;
+}
+
+static void
+_check_linked_token(HANDLE h, int line)
+{
+    TOKEN_LINKED_TOKEN link;
+    DWORD len = sizeof(link);
+
+    if (!GetTokenInformation(h, TokenLinkedToken, &link, sizeof(link), &len)) {
+	printf("Linked token failure on line %d: %ld\n", line, GetLastError());
+    } else {
+	printf("Token linked on line %d: %p\n", line, link.LinkedToken);
+	CloseHandle(link.LinkedToken);
+    }
+}
+#define check_linked_token(h) _check_linked_token(h, __LINE__)
+
+/*
+ * Find the lsass.exe program, verify that it has SE_CREATE_TOKEN_NAME
+ * privilege, and return it's token.
+ */
+DWORD
+find_lsass_tok(HANDLE *rtok)
+{
+    DWORD *processes, len = 1000, newlen, count, err = 0, i;
+    LUID luid;
+    bool found = false;
+    HANDLE tokh = NULL;
+
+    if (!LookupPrivilegeValue(NULL, SE_CREATE_TOKEN_NAME, &luid))
+	return GetLastError();
+
+ restart:
+    processes = (DWORD *) malloc(len);
+    if (!processes)
+	return STATUS_NO_MEMORY;
+    if (!EnumProcesses(processes, len, &newlen))
+	return GetLastError();
+    if (len == newlen) {
+	/* May not have gotten all the processes, try again. */
+	free(processes);
+	len += 1000;
+	goto restart;
+    }
+
+    count = len / sizeof(DWORD);
+    for (i = 0; !found && i < count; i++) {
+	HANDLE proch = OpenProcess(PROCESS_QUERY_INFORMATION |
+				   PROCESS_VM_READ,
+				   FALSE, processes[i]);
+        HMODULE modh;
+	TOKEN_PRIVILEGES *hpriv = NULL;
+	char procname[MAX_PATH];
+	unsigned int j;
+
+	if (!proch)
+	    continue;
+
+        if (!EnumProcessModules(proch, &modh, sizeof(modh), &len))
+	    goto nextproc;
+
+	if (!GetModuleBaseNameA(proch, modh, procname, sizeof(procname)))
+	    goto nextproc;
+
+	if (strcmp(procname, "lsass.exe") != 0)
+	    goto nextproc;
+
+	if (!OpenProcessToken(proch, TOKEN_ALL_ACCESS, &tokh))
+	    goto nextproc;
+
+	err = read_token_info(tokh, TokenPrivileges, (void **) &hpriv, NULL);
+	if (err)
+	    goto nextproc;
+
+	for (j = 0; j < hpriv->PrivilegeCount; j++) {
+	    if (luid_equal(hpriv->Privileges[j].Luid, luid))
+		found = true;
+	}
+
+    nextproc:
+	CloseHandle(proch);
+	if (!found && tokh) {
+	    CloseHandle(tokh);
+	    tokh = NULL;
+	}
+	if (hpriv)
+	    free(hpriv);
+    }
+
+    err = 0;
+    if (tokh) {
+	if (!DuplicateToken(tokh, SecurityImpersonation, rtok))
+	    err = GetLastError();
+	CloseHandle(tokh);
+	return err;
+    }
+
+    return ERROR_PROC_NOT_FOUND;
+}
+
+static DWORD
+deny_admin_groups(HANDLE *ioh)
+{
+    DWORD err;
+    HANDLE resh = NULL;
+    SID *admin_sid = NULL, *admin_member_sid = NULL;
+    SID_AND_ATTRIBUTES disable_sids[2];
+    TOKEN_GROUPS *grps = NULL;
+    unsigned int i;
+    HANDLE lstok;
+    TOKEN_LINKED_TOKEN link;
+
+    /* NT AUTHORITY\Local account and member of Administrators group */
+    err = get_sid_from_type(WinNTLMAuthenticationSid, &admin_member_sid);
+    if (err)
+	return err;
+
+    /* BUILTIN\Administrators */
+    err = get_sid_from_type(WinBuiltinAdministratorsSid, &admin_sid);
+    if (err)
+	goto out_err;
+
+    /* Check if we have admin access. */
+    err = read_token_info(*ioh, TokenGroups, (void **) &grps, NULL);
+    if (err)
+	goto out_err;
+    for (i = 0; i < grps->GroupCount; i++) {
+	if (EqualSid(admin_sid, grps->Groups[i].Sid))
+	    goto is_admin;
+	if (EqualSid(admin_member_sid, grps->Groups[i].Sid))
+	    goto is_admin;
+    }
+
+    goto out_err;
+
+ is_admin:
+
+    disable_sids[0].Sid = admin_member_sid;
+    disable_sids[1].Sid = admin_sid;
+
+    if (!CreateRestrictedToken(*ioh, 0, 2, disable_sids,
+			       0, NULL, 0, NULL, &resh)) {
+	err = GetLastError();
+	goto out_err;
+    }
+
+    /*
+     * Link the privileged token to the restricted one so the
+     * privileged one can be used for escalation.  This requires
+     * SE_CREATE_TOKEN_NAME access, which we can only get from
+     * lsass.exe, so we steal it's token and impersonate it.
+     */
+    err = find_lsass_tok(&lstok);
+    if (err) {
+	print_err("find lsass token", err);
+	goto out_err;;
+    }
+
+    if (!SetThreadToken(NULL, lstok)) {
+	CloseHandle(lstok);
+	err = GetLastError();
+	print_err("Set lsass token", err);
+	goto out_err;
+    }
+    CloseHandle(lstok);
+
+    /* FIXME - this succeeds, but the new token doesn't work. */
+    link.LinkedToken = *ioh;
+    if (!SetTokenInformation(resh, TokenLinkedToken, &link, sizeof(link))) {
+	RevertToSelf();
+	err = GetLastError();
+	goto out_err;
+    }
+
+    RevertToSelf();
+
+    check_linked_token(resh);
+
+    err = 0;
+    *ioh = resh;
+    resh = NULL;
+ out_err:
+    if (grps)
+	free(grps);
+    if (admin_sid)
+	free(admin_sid);
+    if (admin_member_sid)
+	free(admin_member_sid);
+    if (resh)
+	CloseHandle(resh);
+    return err;
+}
+
+static DWORD
+dup_sid(SID *in, SID **out)
+{
+    DWORD len;
+    SID *sid;
+
+    len = GetLengthSid(in);
+    sid = (SID *) malloc(len);
+    if (!sid)
+	return STATUS_NO_MEMORY;
+    if (!CopySid(len, sid, in)) {
+	free(sid);
+	return GetLastError();
+    }
+    *out = sid;
+    return 0;
+}
+
+static DWORD
+get_tok_user(HANDLE h, SID **rsid)
+{
+    DWORD err;
+    TOKEN_USER *user;
+
+    err = read_token_info(h, TokenUser, (void **) &user, NULL);
+    if (err)
+	return err;
+    err = dup_sid((SID *) user->User.Sid, rsid);
+    free(user);
+    return err;
+}
+
+static DWORD
+get_tok_prim_group(HANDLE h, SID **rsid)
+{
+    DWORD err;
+    TOKEN_PRIMARY_GROUP *pgroup;
+
+    err = read_token_info(h, TokenPrimaryGroup, (void **) &pgroup, NULL);
+    if (err)
+	return err;
+    err = dup_sid((SID *) pgroup->PrimaryGroup, rsid);
+    free(pgroup);
+    return err;
+}
+
+static DWORD
+set_tok_prim_group(HANDLE h, SID *sid)
+{
+    TOKEN_PRIMARY_GROUP pgroup;
+
+    pgroup.PrimaryGroup = sid;
+    if (!SetTokenInformation(h, TokenPrimaryGroup, &pgroup, sizeof(pgroup)))
+	return GetLastError();
+    return 0;
+}
+
+/*
+ * An Admin ACL will be in place, convert it to as user one.
+ */
+static DWORD
+fix_user_acl(HANDLE h, SID *user)
+{
+    DWORD err;
+    TOKEN_DEFAULT_DACL *dacl = NULL, ndacl;
+    ACL *acl, *nacl = NULL;
+    SID *admin_sid = NULL;
+    EXPLICIT_ACCESS_A *exa = NULL;
+    ULONG exa_len = 0, i;
+
+    if (!ConvertStringSidToSidA("S-1-5-32-544", ((void **) &admin_sid)))
+	return GetLastError();
+
+    err = read_token_info(h, TokenDefaultDacl, (void **) &dacl, NULL);
+    if (err)
+	goto out_err;
+    acl = dacl->DefaultDacl;
+
+    if (!GetExplicitEntriesFromAclA(acl, &exa_len, &exa)) {
+	err = GetLastError();
+	/* This return an error for some reason. */
+	if (err != ERROR_INSUFFICIENT_BUFFER)
+	    goto out_err;
+	err = 0;
+    }
+
+    /* Look for the allowed admin ACE. */
+    for (i = 0; i < exa_len; i++) {
+	if (exa[i].Trustee.TrusteeForm != TRUSTEE_IS_SID)
+	    continue;
+	if (!EqualSid((SID *) exa[i].Trustee.ptstrName, admin_sid))
+	    continue;
+
+	/* Found it, change the SID. */
+	exa[i].Trustee.ptstrName = (LPSTR) user;
+	err = SetEntriesInAclA(exa_len, exa, NULL, &nacl);
+	if (err)
+	    goto out_err;
+	break;	 
+    }
+
+    if (nacl) {
+	ndacl.DefaultDacl = nacl;
+	if (!SetTokenInformation(h, TokenDefaultDacl, &ndacl, sizeof(ndacl))) {
+	    err = GetLastError();
+	    goto out_err;
+	}
+    }
+
+ out_err:
+    if (exa)
+	LocalFree(exa);
+    if (nacl)
+	LocalFree(nacl);
+    if (admin_sid)
+	LocalFree(admin_sid);
+    if (dacl)
+	free(dacl);
+    return err;
+}
+
+static DWORD
+setup_network_token(HANDLE *inh, bool priv)
+{
+    DWORD err = 0;
+    HANDLE h = NULL;
+    struct priv_data *privs = NULL;
+    unsigned int privs_len;
+    SID *user = NULL;
+    SID *prim_grp = NULL;
+
+    err = get_tok_user(*inh, &user);
+    if (err)
+	goto out_err;
+
+    err = get_tok_prim_group(*inh, &prim_grp);
+    if (err)
+	goto out_err;
+
+    err = set_tok_prim_group(*inh, user);
+    if (err)
+	goto out_err;
+
+    if (!priv) {
+	h = *inh;
+	err = deny_admin_groups(&h);
+	if (err) {
+	    h = NULL;
+	    goto out_err;
+	}
+
+	err = fix_user_acl(h, user);
+	if (err)
+	    goto out_err;
+
+	err = medium_mandatory_policy(h);
+	if (err)
+	    goto out_err;
+
+	privs = alloc_priv_array(std_privs, &privs_len);
+	if (!privs) {
+	    err = STATUS_NO_MEMORY;
+	    goto out_err;
+	}
+	err = update_privileges(h, privs, privs_len);
+	if (err)
+	    goto out_err;
+
+	*inh = h;
+    }
+    h = NULL;
+
+ out_err:
+    if (user)
+	free(user);
+    if (prim_grp)
+	free(prim_grp);
+    if (privs)
+	free(privs);
+    if (h)
+	CloseHandle(h);
+    return err;
+}
+
+VOID
+InitLsaString(PLSA_STRING DestinationString,
+	      const char *szSourceString)
+{
+   USHORT StringSize;
+
+   StringSize = (USHORT)strlen(szSourceString);
+
+   DestinationString->Length = StringSize;
+   DestinationString->MaximumLength = StringSize + sizeof(CHAR);
+   DestinationString->Buffer = (PCHAR) malloc(DestinationString->MaximumLength);
+
+   if (DestinationString->Buffer) {
+      memcpy(DestinationString->Buffer, szSourceString,
+	     DestinationString->Length);
+   } else {
+      memset(DestinationString, 0, sizeof(LSA_STRING));
+   }
+}
+
+PBYTE
+InitUnicodeString (PUNICODE_STRING DestinationString,
+		   LPWSTR szSourceString,
+		   PBYTE pbDestinationBuffer)
+{
+   USHORT StringSize;
+
+   StringSize = (USHORT)wcslen(szSourceString) * sizeof(WCHAR);
+   memcpy(pbDestinationBuffer, szSourceString, StringSize);
+
+   DestinationString->Length = StringSize;
+   DestinationString->MaximumLength = StringSize + sizeof(WCHAR);
+   DestinationString->Buffer = (PWSTR)pbDestinationBuffer;
+
+   return (PBYTE)pbDestinationBuffer + StringSize + sizeof(WCHAR);
+}
+
+// NB this handler runs in a dedicated thread.
+BOOL WINAPI ConsoleControlHandler(DWORD ctrlType) {
+#if 0
+    LPCSTR ctrlTypeName;
+#endif
+
+#define HANDLE_CONSOLE_CONTROL_EVENT(e) case e: ctrlTypeName = #e; break;
+    switch (ctrlType) {
+#if 0
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_C_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_BREAK_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_CLOSE_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_LOGOFF_EVENT)
+        HANDLE_CONSOLE_CONTROL_EVENT(CTRL_SHUTDOWN_EVENT)
+#endif
+        default:
+            return FALSE;
+    }
+#undef HANDLE_CONSOLE_CONTROL_EVENT
+    
+    switch (ctrlType) {
+        case CTRL_CLOSE_EVENT:
+        case CTRL_LOGOFF_EVENT:
+        case CTRL_SHUTDOWN_EVENT:
+            return FALSE;
+         default:
+            return TRUE;
+    }
+}
+
 
 static void
 usage(void)
@@ -1948,8 +2382,8 @@ _tmain (int argc, TCHAR *argv[])
 	goto End;
     }
 
-    if (!do_privileged && logon_type == Network) {
-	err = setup_process_token(&logon_tok, false);
+    if (logon_type == Network) {
+	err = setup_network_token(&logon_tok, do_privileged);
 	if (err) {
 	    print_err("setup_process_token", err);
 	    goto End;
@@ -2005,6 +2439,8 @@ _tmain (int argc, TCHAR *argv[])
     }
     CloseHandle(logon_tok);
     logon_tok = tmph;
+
+    print_tokinfo(logon_tok);
 
 #if 1
     //
