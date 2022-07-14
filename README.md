@@ -62,6 +62,7 @@ Options are:
   logon sid.  Does not work with --lsa.
 * --esids - Add interactive SIDs to the logon.
 * --priv - Do not drop administrator privileges, only works with --s4u.
+* --puser - Just print out the calling users auth token and quit.
 
 As you can tell, these are all kind of a hack.  If you don't give any
 options, it won't work.  If you give a password and no option:
